@@ -21,10 +21,11 @@ impl From<RawCard> for Card {
     }
 }
 
-type Move = (MatchType, i8, Vec<RawCard>);
+pub type Move = (MatchType, i8, (RawCard, Option<RawCard>));
 
+#[derive(Debug)]
 pub struct Board {
-    cards: Vec<RawCard>,
+    pub cards: Vec<RawCard>,
     card_counts: HashMap<Card, u8>,
 
     stack: Vec<RawCard>,
@@ -87,19 +88,15 @@ impl Board {
         }
     }
 
-    pub fn remove_cards(&mut self, cards: Vec<RawCard>) {
+    pub fn remove_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
         // Get the indexes of the cards we are going to remove
         // TODO: Calling cards.contains for each card in cards.. O(n*m)? Can we improve? Cards to
         // remove shouldn't be more than 2 at most, so I guess O(n*2) -> O(n) in practice?
-        let card_idxs: Vec<u8> = self
-            .cards
-            .iter()
-            .enumerate()
-            .filter(|(_, &card)| cards.contains(&card))
-            .map(|(idx, _)| idx as u8)
-            .collect();
-
-        println!("Removing cards {:?} at indexes {:?}", cards, card_idxs);
+        let mut card_idxs: Vec<u8> =
+            vec![self.cards.iter().position(|&card| card == left).unwrap() as u8];
+        if let Some(right) = right {
+            card_idxs.push(self.cards.iter().position(|&card| card == right).unwrap() as u8);
+        }
 
         // One by one, remove those indexes and check if we introduce a new leaf
         let mut leaf_candidates: HashSet<u8> = HashSet::new();
@@ -136,11 +133,9 @@ impl Board {
         }
 
         // Also reduce the counts..
-        for card in cards {
-            match self.card_counts.get_mut(&card.into()) {
-                Some(count) => *count -= 1,
-                None => panic!("Tried to remove a card that doesn't exist!"),
-            }
+        *self.stack_counts.get_mut(&(left.into())).unwrap() -= 1;
+        if let Some(right) = right {
+            *self.stack_counts.get_mut(&(right.into())).unwrap() -= 1;
         }
     }
 
@@ -149,7 +144,7 @@ impl Board {
         for raw_card in self.leaves() {
             let card: Card = raw_card.into();
             if card.0 == 13 {
-                return vec![(MatchType::Board, 0, vec![raw_card])];
+                return vec![(MatchType::Board, 0, (raw_card, None))];
             }
         }
 
@@ -179,9 +174,9 @@ impl Board {
                 already_matched.insert(leaf);
                 if solo_cards.contains(&leaf.into()) {
                     // Last pair match, only logical move
-                    return vec![(MatchType::Board, 0, vec![leaf, potential_match])];
+                    return vec![(MatchType::Board, 0, (leaf, Some(potential_match)))];
                 }
-                moves.push((MatchType::Board, 0, vec![leaf, potential_match]));
+                moves.push((MatchType::Board, 0, (leaf, Some(potential_match))));
                 moves_on_table = true;
             }
         }
@@ -190,10 +185,6 @@ impl Board {
         for leaf in self.leaves() {
             let leaf_val: Card = leaf.into();
             let leaf_match = match_card(leaf_val);
-            println!(
-                "Checking leaf {:?} for stack match {:?}",
-                leaf_val, leaf_match
-            );
             if self.stack_counts[&leaf_match] == 0 {
                 // Match is not in the satck
                 continue;
@@ -210,11 +201,19 @@ impl Board {
                 let stack_card = self.stack[stack_card_idx as usize];
                 if solo_cards.contains(&leaf_val) && draw <= 0 {
                     // We should get rif og it ASAP
-                    return vec![(MatchType::BoardStack, max(draw, 0), vec![leaf, stack_card])];
+                    return vec![(
+                        MatchType::BoardStack,
+                        max(draw, 0),
+                        (leaf, Some(stack_card)),
+                    )];
                 }
 
                 // Left side of visible stack card is -1, no need to draw, hence the max
-                moves.push((MatchType::BoardStack, max(draw, 0), vec![leaf, stack_card]));
+                moves.push((
+                    MatchType::BoardStack,
+                    max(draw, 0),
+                    (leaf, Some(stack_card)),
+                ));
             }
         }
 
@@ -225,7 +224,7 @@ impl Board {
                 if draws != 0 {
                     continue;
                 }
-                let card_val: Card = cards[0].into();
+                let card_val: Card = cards.0.into();
                 if card_val.0 == 13 || solo_cards.contains(&card_val) {
                     // If this stack move is a solo move, but we should only return it IF there are
                     // no 0 draw moves already available
@@ -283,12 +282,12 @@ impl Board {
             if self.stack_idx < self.stack.len() as u8 {
                 let right = self.stack[self.stack_idx as usize];
                 if cards_match(left, right) {
-                    moves.insert((MatchType::Stack, 0, vec![left, right]));
+                    moves.insert((MatchType::Stack, 0, (left, Some(right))));
                 }
             }
             // Also check if there is a king visible on the left side
             if Card::from(left).0 == 13 {
-                moves.insert((MatchType::Stack, -1, vec![left]));
+                moves.insert((MatchType::Stack, -1, (left, None)));
             }
         }
 
@@ -296,7 +295,7 @@ impl Board {
         if self.stack_idx < self.stack.len() as u8 {
             let right = self.stack[self.stack_idx as usize];
             if Card::from(right).0 == 13 {
-                moves.insert((MatchType::Stack, 0, vec![right]));
+                moves.insert((MatchType::Stack, 0, (right, None)));
             }
         }
 
@@ -308,9 +307,9 @@ impl Board {
         {
             if Card::from(*right).0 == 13 {
                 // Get rid of that king!
-                moves.insert((MatchType::Stack, draw as i8 + 1, vec![*right]));
+                moves.insert((MatchType::Stack, draw as i8 + 1, (*right, None)));
             } else if cards_match(*left, *right) {
-                moves.insert((MatchType::Stack, draw as i8 + 1, vec![*left, *right]));
+                moves.insert((MatchType::Stack, draw as i8 + 1, (*left, Some(*right))));
             }
         }
 
@@ -325,7 +324,7 @@ impl Board {
                 moves.insert((
                     MatchType::Stack,
                     draw as i8 + stack_len as i8 - self.stack_idx as i8 + 1,
-                    vec![*left, *right],
+                    (*left, Some(*right)),
                 ));
             }
         }
@@ -333,8 +332,65 @@ impl Board {
         moves
     }
 
+    fn remove_stack_cards(&mut self, (card, stack_card): (RawCard, Option<RawCard>)) {
+        if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == card {
+            // Need to shift back since the right card will have moved up
+            self.stack_idx -= 1;
+        }
+        let card_idx = self.stack.iter().position(|&c| c == card).unwrap();
+        self.stack.remove(card_idx);
+        *self.stack_counts.get_mut(&(card.into())).unwrap() -= 1;
+
+        if let Some(stack_card) = stack_card {
+            if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == stack_card {
+                // Need to shift back since the right card will have moved up
+                self.stack_idx -= 1;
+            }
+            let stack_card_idx = self.stack.iter().position(|&c| c == stack_card).unwrap();
+            self.stack.remove(stack_card_idx);
+            *self.stack_counts.get_mut(&(stack_card.into())).unwrap() -= 1;
+        }
+    }
+
+    fn stack_draw(&mut self, draws: i8) {
+        if draws == 0 {
+            return;
+        }
+        self.stack_idx += draws as u8;
+        if self.stack_idx > self.stack.len() as u8 {
+            self.stack_idx -= self.stack.len() as u8 + 1; // Extra one for the stack reset
+        }
+        self.moves += draws as u8;
+    }
+
     pub fn leaves(&self) -> HashSet<RawCard> {
         HashSet::from_iter(self.leaf_idxs.iter().map(|idx| self.cards[*idx as usize]))
+    }
+
+    pub fn play_move(&mut self, r#move: Move) {
+        let (move_type, draws, cards) = r#move;
+        self.stack_draw(draws);
+
+        match (move_type, cards) {
+            (MatchType::Board, cards) => self.remove_cards(cards),
+            (MatchType::BoardStack, (board_card, Some(stack_card))) => {
+                // Should raise value error if flipped, not wasting cycles on error checking,
+                // shouldn't be mixed up in the first place!
+                self.remove_stack_cards((stack_card, None));
+                *self.card_counts.get_mut(&(board_card.into())).unwrap() -= 1;
+                self.remove_cards((board_card, None));
+            }
+            (MatchType::Stack, (left, right)) => {
+                self.remove_stack_cards((left, right));
+                *self.card_counts.get_mut(&(left.into())).unwrap() -= 1;
+                if let Some(right) = right {
+                    *self.card_counts.get_mut(&(right.into())).unwrap() -= 1;
+                }
+            }
+            _ => panic!("Illegal move"),
+        };
+
+        self.moves += 1;
     }
 }
 
@@ -439,7 +495,7 @@ mod test {
             ])
         );
 
-        board.remove_cards(vec![RawCard(12), RawCard(16)]);
+        board.remove_cards((RawCard(12), Some(RawCard(16))));
 
         assert_eq!(
             board.leaves(),
@@ -452,7 +508,7 @@ mod test {
             ])
         );
 
-        board.remove_cards(vec![RawCard(14), RawCard(22)]);
+        board.remove_cards((RawCard(14), Some(RawCard(22))));
 
         assert_eq!(
             board.leaves(),
@@ -475,15 +531,15 @@ mod test {
 
         assert_eq!(moves.len(), 1);
 
-        let r#move = &moves[0];
+        let (move_type, draws, cards) = &moves[0];
 
         // Only one move makes sense, the king (12) in the leaves
-        assert_eq!(r#move.0, MatchType::Board);
-        assert_eq!(r#move.1, 0);
-        assert_eq!(r#move.2, vec![RawCard(12)]);
+        assert_eq!(*move_type, MatchType::Board);
+        assert_eq!(*draws, 0);
+        assert_eq!(*cards, (RawCard(12), None));
 
         // Remove the king
-        board.remove_cards(vec![RawCard(12)]);
+        board.remove_cards((RawCard(12), None));
 
         // Get the next possible moves
         let moves = board.get_moves();
@@ -510,6 +566,22 @@ mod test {
         assert_eq!(stack_matches, 5);
 
         // For a total of 20 moves
+        assert_eq!(moves.len(), 20);
+    }
+
+    #[test]
+    fn test_board_play_move() {
+        let mut board = get_base_board();
+
+        let moves = board.get_moves();
+
+        assert_eq!(moves.len(), 1);
+        let r#move: Move = moves.into_iter().next().unwrap();
+
+        board.play_move(r#move);
+
+        let moves = board.get_moves();
+
         assert_eq!(moves.len(), 20);
     }
 }
