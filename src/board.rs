@@ -7,14 +7,14 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct Board {
-    pub cards: Vec<RawCard>,
+    pub(crate) cards: Vec<RawCard>,
     card_counts: HashMap<Card, u8>,
 
-    pub stack: Vec<RawCard>,
-    pub stack_idx: i32,
+    pub(crate) stack: Vec<RawCard>,
+    pub(crate) stack_idx: i32,
     stack_counts: HashMap<Card, u8>,
 
-    pub leaf_idxs: HashSet<u8>,
+    pub(crate) leaf_idxs: HashSet<u8>,
 
     pub moves: i32,
     pub completed: bool,
