@@ -1,4 +1,5 @@
 use crate::board::{Board, Card, Move, RawCard};
+use colored::{ColoredString, Colorize};
 use std::collections::HashMap;
 
 /// A raw value will be from 0 to 51
@@ -79,19 +80,27 @@ pub fn pretty_print_board(board: &Board) {
         for _ in 0..(6 - row) {
             line.push(' ');
         }
+        print!("{}", line);
         for _ in 0..(row + 1) {
-            line.push_str(&pretty_print_card(board.cards[idx]));
-            line.push(' ');
+            if board.leaf_idxs.contains(&(idx as u8)) {
+                print!("{} ", pretty_print_card(board.cards[idx]).purple());
+            } else {
+                print!("{} ", pretty_print_card(board.cards[idx]));
+            };
             idx += 1;
         }
-        println!("{}", line);
+        println!();
     }
 
     // Then just print the stack in order
     println!();
     print!("Stack: ");
-    for card in &board.stack {
-        print!("{} ", pretty_print_card(*card));
+    for (idx, card) in board.stack.iter().enumerate() {
+        if idx as i32 == board.stack_idx || idx as i32 == board.stack_idx - 1 {
+            print!("{} ", pretty_print_card(*card).purple());
+        } else {
+            print!("{} ", pretty_print_card(*card));
+        }
     }
     println!();
 
@@ -110,29 +119,7 @@ pub fn cards_match(a: RawCard, b: RawCard) -> bool {
     match_card(a) == b
 }
 
-fn get_colour(name: &str) -> &str {
-    match name {
-        "black" => "\u{1b}[30m",
-        "red" => "\u{1b}[31m",
-        "green" => "\u{1b}[32m",
-        "yellow" => "\u{1b}[33m",
-        "blue" => "\u{1b}[34m",
-        "magenta" => "\u{1b}[35m",
-        "cyan" => "\u{1b}[36m",
-        "white" => "\u{1b}[37m",
-        "bright-black" => "\u{1b}[90m",
-        "bright-red" => "\u{1b}[91m",
-        "bright-green" => "\u{1b}[92m",
-        "bright-yellow" => "\u{1b}[93m",
-        "bright-blue" => "\u{1b}[94m",
-        "bright-magenta" => "\u{1b}[95m",
-        "bright-cyan" => "\u{1b}[96m",
-        "bright-white" => "\u{1b}[97m",
-        _ => "\u{1b}[0m",
-    }
-}
-
-fn pretty_print_card(card: RawCard) -> String {
+fn pretty_print_card(card: RawCard) -> ColoredString {
     match Card::from(card) {
         Card(1) => String::from("A"),
         Card(10) => String::from("0"), // Single width values for all cards
@@ -141,34 +128,29 @@ fn pretty_print_card(card: RawCard) -> String {
         Card(13) => String::from("K"),
         Card(x) => x.to_string(),
     }
+    .green()
 }
 
 pub fn pretty_print_move(board: &Board, idx: u8, (_, draws, (left_card, right_card)): Move) {
     let draw_str = if draws > 0 {
-        format!("Draw {} cards and ", draws)
+        format!("Draw {} cards and ", draws).blue()
     } else {
-        String::from("")
+        String::from("").blue()
     };
 
     let cards_str = match (left_card, right_card) {
         (left_card, None) => format!(
-            "{}emove {}{}{} {}",
+            "{}emove {} {}",
             if draw_str.is_empty() { "R" } else { "r" },
-            get_colour("green"),
             pretty_print_card(left_card),
-            get_colour("reset"),
             get_loc(board, left_card),
         ),
         (left_card, Some(right_card)) => format!(
-            "{}atch {}{}{} {} and {}{}{} {}",
+            "{}atch {} {} and {} {}",
             if draw_str.is_empty() { "M" } else { "m" },
-            get_colour("green"),
             pretty_print_card(left_card),
-            get_colour("reset"),
             get_loc(board, left_card),
-            get_colour("green"),
             pretty_print_card(right_card),
-            get_colour("reset"),
             get_loc(board, right_card),
         ),
     };
@@ -190,7 +172,7 @@ fn card_pos(board: &Board, card: RawCard) -> String {
     }
 }
 
-pub fn get_loc(board: &Board, card: RawCard) -> String {
+pub fn get_loc(board: &Board, card: RawCard) -> ColoredString {
     if board.cards.contains(&card) {
         // Count the leaves
         let mut num_counts: HashMap<Card, usize> = HashMap::new();
@@ -199,21 +181,12 @@ pub fn get_loc(board: &Board, card: RawCard) -> String {
         }
 
         if num_counts[&Card::from(card)] == 1 {
-            format!(
-                "{}on the board{}",
-                get_colour("yellow"),
-                get_colour("reset"),
-            )
+            "on the board".yellow()
         } else {
-            format!(
-                "{}{}{}",
-                get_colour("yellow"),
-                card_pos(board, card),
-                get_colour("reset"),
-            )
+            card_pos(board, card).yellow()
         }
     } else {
-        format!("{}on the stack{}", get_colour("red"), get_colour("reset"),)
+        "on the stack".red()
     }
 }
 

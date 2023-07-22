@@ -15,24 +15,30 @@ fn main() {
     let top_moves = 2;
 
     let solution =
-        simulate_games(board.clone(), 50, top_moves, first_top_moves, first_games).unwrap();
-    describe_solution(board, solution);
+        simulate_games(board.clone(), 50, top_moves, first_top_moves, first_games, false).unwrap();
+    describe_solution(board, solution, false);
 }
 
-fn describe_solution(mut board: Board, solution: Vec<usize>) {
+fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
     let mut moves_made: i32 = 0;
-    println!("Solution: {:?}", solution);
     for move_num in solution.iter() {
-        pretty_print_board(&board);
+        if verbose {
+            pretty_print_board(&board);
+        }
 
         let moves = board.get_moves();
         if moves.is_empty() {
             panic!("No moves left?");
         }
 
-        println!("All options ({} was picked):", move_num);
-        for (idx, r#move) in moves.iter().enumerate() {
-            pretty_print_move(&board, idx as u8 + 1, *r#move);
+        if verbose {
+            println!("Available moves:");
+            for (idx, r#move) in moves.iter().enumerate() {
+                if idx + 1 == *move_num {
+                    print!("> ");
+                }
+                pretty_print_move(&board, idx as u8 + 1, *r#move);
+            }
         }
 
         let r#move = match moves.get(*move_num - 1) {
@@ -40,7 +46,9 @@ fn describe_solution(mut board: Board, solution: Vec<usize>) {
             None => panic!("Move {} not found in moves: {:?}", move_num, moves),
         };
 
-        pretty_print_move(&board, moves_made as u8, *r#move);
+        if !verbose {
+            pretty_print_move(&board, moves_made as u8, *r#move);
+        }
         
         board.play_move(*r#move);
 
@@ -54,6 +62,7 @@ fn simulate_games(
     top_moves: usize,
     first_top_moves: usize,
     first_games: usize,
+    verbose: bool,
 ) -> Result<Vec<usize>, ()> {
     let mut seen_states: HashSet<String> = HashSet::new();
 
@@ -68,7 +77,9 @@ fn simulate_games(
         let queue = queues.get(queue_num).unwrap().clone();
         let queue_size = queue.len();
 
-        println!("Queue {} size: {}", queue_num, queue_size);
+        if verbose {
+            println!("Queue {} size: {}", queue_num, queue_size);
+        }
 
         for (board, moves_made) in queue {
             if board.completed {

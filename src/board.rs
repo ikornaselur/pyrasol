@@ -1,10 +1,10 @@
 use crate::blocks::{card_blocked_by, card_blocks, card_directly_blocks};
-use std::cmp::Ordering;
 use crate::utils::{card_from_raw, cards_match, match_card};
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
 pub enum MatchType {
     Board,
     BoardStack,
@@ -24,16 +24,44 @@ impl From<RawCard> for Card {
 
 pub type Move = (MatchType, i32, (RawCard, Option<RawCard>));
 
+pub fn move_sort(
+    (a_move_type, a_draws, (a_left_card, a_right_card)): &Move,
+    (b_move_type, b_draws, (b_left_card, b_right_card)): &Move,
+) -> Ordering {
+    // 1. Number of draws first
+    if a_draws != b_draws {
+        return a_draws.cmp(b_draws);
+    }
+    // 2. Then move type
+    if a_move_type != b_move_type {
+        return a_move_type.cmp(b_move_type);
+    }
+
+    // 3. The left card, if not the same
+    if a_left_card != b_left_card {
+        return a_left_card.cmp(b_left_card);
+    }
+    // 4. less/greated depending on right card being None
+    if a_right_card.is_none() && b_right_card.is_some() {
+        return Ordering::Less;
+    }
+    if a_right_card.is_some() && b_right_card.is_none() {
+        return Ordering::Greater;
+    }
+    // 5. The right card if both are Some
+    a_right_card.cmp(b_right_card)
+}
+
 #[derive(Debug, Clone)]
 pub struct Board {
     pub cards: Vec<RawCard>,
     card_counts: HashMap<Card, u8>,
 
     pub stack: Vec<RawCard>,
-    stack_idx: i32,
+    pub stack_idx: i32,
     stack_counts: HashMap<Card, u8>,
 
-    leaf_idxs: HashSet<u8>,
+    pub leaf_idxs: HashSet<u8>,
 
     pub moves: i32,
     pub completed: bool,
@@ -183,7 +211,10 @@ impl Board {
         let mut moves_on_table = false;
         let mut already_matched: HashSet<RawCard> = HashSet::new();
 
-        for leaf in self.leaves() {
+        let mut leaves: Vec<RawCard> = self.leaves().into_iter().collect();
+        leaves.sort();
+
+        for leaf in leaves {
             let potential_matches: Vec<RawCard> = self
                 .leaves()
                 .into_iter()
@@ -259,26 +290,8 @@ impl Board {
         }
 
         // Sort the moves by:
-        // 1. Number of draws, lowest first
-        // 2. If the second card is None
-        // 3. By the cards values
-        moves.sort_by(|a, b| {
-            let a_card_val: Card = a.2.0.into();
-            let b_card_val: Card = b.2.0.into();
-            let a_draws = a.1;
-            let b_draws = b.1;
-            if a_draws != b_draws {
-                return a_draws.cmp(&b_draws);
-            }
-            if a.2.1.is_none() && b.2.1.is_some() {
-                return Ordering::Less;
-            }
-            if a.2.1.is_some() && b.2.1.is_none() {
-                return Ordering::Greater;
-            }
-            a_card_val.cmp(&b_card_val)
-        });
-        
+        moves.sort_by(move_sort);
+
         moves
     }
 
@@ -648,18 +661,70 @@ mod test {
     }
 
     #[test]
+    fn test_move_type_order() {
+        let mut move_types = vec![MatchType::BoardStack, MatchType::Stack, MatchType::Board];
+
+        move_types.sort();
+
+        assert_eq!(
+            move_types,
+            vec![MatchType::Board, MatchType::BoardStack, MatchType::Stack]
+        );
+    }
+
+    #[test]
+    fn test_raw_card_order() {
+        let mut cards = vec![
+            RawCard(10),
+            RawCard(21),
+            RawCard(3),
+            RawCard(7),
+            RawCard(1),
+            RawCard(2),
+            RawCard(14),
+        ];
+
+        cards.sort();
+
+        assert_eq!(
+            cards,
+            vec![
+                RawCard(1),
+                RawCard(2),
+                RawCard(3),
+                RawCard(7),
+                RawCard(10),
+                RawCard(14),
+                RawCard(21)
+            ]
+        );
+    }
+
+    #[test]
     fn test_board_get_moves_has_a_stable_order() {
-        let board_a = get_base_board();
-        let board_b = get_base_board();
+        let mut board_a = get_base_board();
+        let mut board_b = get_base_board();
+
+        // Play moves to get to 20 moves, as the first list of moves is just one move
+        let r#move: Move = board_a.get_moves().into_iter().next().unwrap();
+        board_a.play_move(r#move);
+        let r#move: Move = board_b.get_moves().into_iter().next().unwrap();
+        board_b.play_move(r#move);
 
         let moves_a = board_a.get_moves();
         let moves_b = board_b.get_moves();
+
+        println!("{:?}", moves_a);
+        println!("{:?}", moves_b);
+
+        assert_eq!(moves_a.len(), 20);
+        assert_eq!(moves_b.len(), 20);
 
         assert_eq!(moves_a, moves_b);
 
         let board_c = board_a.clone();
         let moves_c = board_c.get_moves();
-    
+
         assert_eq!(moves_a, moves_c);
     }
 }
