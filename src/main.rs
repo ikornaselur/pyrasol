@@ -1,7 +1,9 @@
 use colored::Colorize;
+use std::sync::{Arc, Mutex};
 use pyramid_solver::validators::validate_board;
 use pyramid_solver::Board;
 use pyramid_solver::{parse_board, pretty_print_board, pretty_print_move};
+use rayon::prelude::*;
 use std::collections::HashSet;
 
 use clap::Parser;
@@ -114,35 +116,36 @@ fn simulate_games(
     first_games: usize,
     verbose: bool,
 ) -> Result<Vec<usize>, ()> {
-    let mut seen_states: HashSet<String> = HashSet::new();
+    let seen_states = Arc::new(Mutex::new(HashSet::new()));
 
     // Pre-create 60 queues for different move counts
-    let mut queues: Vec<Vec<(Board, Vec<usize>)>> = vec![vec![]; max_depth];
+    let queues  = Arc::new(Mutex::new(vec![vec![]; max_depth]));
 
     // Initial board at 0 moves
-    queues[0].push((board, vec![]));
+    queues.lock().unwrap().get_mut(0).unwrap().push((board, vec![]));
+    // queues[0].push((board, vec![]));
 
     let mut queue_num = 0;
     while queue_num < max_depth {
-        let queue = queues.get(queue_num).unwrap().clone();
+        let queue = queues.lock().unwrap().get(queue_num).unwrap().clone();
         let queue_size = queue.len();
 
         if verbose {
             println!("Queue {} size: {}", queue_num, queue_size);
         }
 
-        for (board, moves_made) in queue {
+        let result = queue.par_iter().find_map_any(|(board, moves_made)| {
             if board.completed {
                 println!(
                     "{}",
                     format!("Solution found with {} moves made", board.moves).green()
                 );
-                return Ok(moves_made);
+                return Some(moves_made.clone());
             }
 
             let moves = board.get_moves();
             if moves.is_empty() {
-                continue;
+                return None;
             }
             // Sort first by draws and then by the card being removed
 
@@ -167,20 +170,24 @@ fn simulate_games(
                 new_board.play_move(*r#move);
 
                 let board_state = new_board.get_state();
-                if seen_states.contains(&board_state) {
+                if seen_states.lock().unwrap().contains(&board_state) {
                     continue;
                 }
-                seen_states.insert(board_state);
+                seen_states.lock().unwrap().insert(board_state);
 
                 let mut moves_made = moves_made.clone();
                 moves_made.push(moves_played + 1);
 
-                let sub_queue = queues.get_mut(new_board.moves as usize);
-                match sub_queue {
+                match queues.lock().unwrap().get_mut(new_board.moves as usize) {
                     Some(sub_queue) => sub_queue.push((new_board, moves_made)),
                     None => panic!("No queue for move count {}", new_board.moves),
                 };
             }
+            None
+        });
+
+        if let Some(result) = result {
+            return Ok(result);
         }
 
         queue_num += 1;
