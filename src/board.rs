@@ -1,67 +1,20 @@
 use crate::blocks::{card_blocked_by, card_blocks, card_directly_blocks};
-use crate::utils::{card_from_raw, cards_match, match_card};
+use crate::card::{Card, MatchType, RawCard};
+use crate::r#move::{move_sort, Move};
+use crate::utils::{cards_match, match_card};
 use std::cmp::max;
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
-pub enum MatchType {
-    Board,
-    BoardStack,
-    Stack,
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct RawCard(pub u8);
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct Card(pub u8);
-
-impl From<RawCard> for Card {
-    fn from(raw_card: RawCard) -> Self {
-        Card(card_from_raw(raw_card.0))
-    }
-}
-
-pub type Move = (MatchType, i32, (RawCard, Option<RawCard>));
-
-pub fn move_sort(
-    (a_move_type, a_draws, (a_left_card, a_right_card)): &Move,
-    (b_move_type, b_draws, (b_left_card, b_right_card)): &Move,
-) -> Ordering {
-    // 1. Number of draws first
-    if a_draws != b_draws {
-        return a_draws.cmp(b_draws);
-    }
-    // 2. Then move type
-    if a_move_type != b_move_type {
-        return a_move_type.cmp(b_move_type);
-    }
-
-    // 3. The left card, if not the same
-    if a_left_card != b_left_card {
-        return a_left_card.cmp(b_left_card);
-    }
-    // 4. less/greated depending on right card being None
-    if a_right_card.is_none() && b_right_card.is_some() {
-        return Ordering::Less;
-    }
-    if a_right_card.is_some() && b_right_card.is_none() {
-        return Ordering::Greater;
-    }
-    // 5. The right card if both are Some
-    a_right_card.cmp(b_right_card)
-}
 
 #[derive(Debug, Clone)]
 pub struct Board {
-    pub cards: Vec<RawCard>,
+    pub(crate) cards: Vec<RawCard>,
     card_counts: HashMap<Card, u8>,
 
-    pub stack: Vec<RawCard>,
-    pub stack_idx: i32,
+    pub(crate) stack: Vec<RawCard>,
+    pub(crate) stack_idx: i32,
     stack_counts: HashMap<Card, u8>,
 
-    pub leaf_idxs: HashSet<u8>,
+    pub(crate) leaf_idxs: HashSet<u8>,
 
     pub moves: i32,
     pub completed: bool,
@@ -141,8 +94,6 @@ impl Board {
 
     pub fn remove_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
         // Get the indexes of the cards we are going to remove
-        // TODO: Calling cards.contains for each card in cards.. O(n*m)? Can we improve? Cards to
-        // remove shouldn't be more than 2 at most, so I guess O(n*2) -> O(n) in practice?
         let mut card_idxs: Vec<u8> =
             vec![self.cards.iter().position(|&card| card == left).unwrap() as u8];
         if let Some(right) = right {
@@ -170,7 +121,6 @@ impl Board {
         // hardly makes any sense, but it should be obvious.. right?)
         let mut candidate_blockers: HashSet<u8> = HashSet::new();
         for candidate in leaf_candidates.clone() {
-            // TODO: Is the clone necessary?
             candidate_blockers.extend(card_blocks(candidate).iter());
         }
 
@@ -660,46 +610,6 @@ mod test {
     }
 
     #[test]
-    fn test_move_type_order() {
-        let mut move_types = vec![MatchType::BoardStack, MatchType::Stack, MatchType::Board];
-
-        move_types.sort();
-
-        assert_eq!(
-            move_types,
-            vec![MatchType::Board, MatchType::BoardStack, MatchType::Stack]
-        );
-    }
-
-    #[test]
-    fn test_raw_card_order() {
-        let mut cards = vec![
-            RawCard(10),
-            RawCard(21),
-            RawCard(3),
-            RawCard(7),
-            RawCard(1),
-            RawCard(2),
-            RawCard(14),
-        ];
-
-        cards.sort();
-
-        assert_eq!(
-            cards,
-            vec![
-                RawCard(1),
-                RawCard(2),
-                RawCard(3),
-                RawCard(7),
-                RawCard(10),
-                RawCard(14),
-                RawCard(21)
-            ]
-        );
-    }
-
-    #[test]
     fn test_board_get_moves_has_a_stable_order() {
         let mut board_a = get_base_board();
         let mut board_b = get_base_board();
@@ -725,21 +635,6 @@ mod test {
         let moves_c = board_c.get_moves();
 
         assert_eq!(moves_a, moves_c);
-    }
-
-    #[test]
-    fn test_skip_and_take() {
-        let arr = vec![0, 1, 2, 3, 4, 5, 6];
-
-        let pivot = 3;
-
-        // skipping arr[pivot:] == [3, 4, 5, 6]
-        let a = arr.iter().skip(pivot).collect::<Vec<_>>();
-        assert_eq!(a, vec![&3, &4, &5, &6]);
-
-        // taking arr[:pivot] == [0, 1, 2]
-        let b = arr.iter().take(pivot).collect::<Vec<_>>();
-        assert_eq!(b, vec![&0, &1, &2]);
     }
 
     #[test]

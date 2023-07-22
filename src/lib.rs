@@ -1,5 +1,9 @@
 mod blocks;
-pub mod board;
+mod board;
+mod card;
+mod r#move;
 mod utils;
+pub mod validators;
 
-pub use utils::{pretty_print_move, parse_board, pretty_print_board};
+pub use board::Board;
+pub use utils::{parse_board, pretty_print_board, pretty_print_move};
