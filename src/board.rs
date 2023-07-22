@@ -1,18 +1,19 @@
 use crate::blocks::{card_blocked_by, card_blocks, card_directly_blocks};
 use crate::utils::{card_from_raw, cards_match, match_card};
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
 pub enum MatchType {
     Board,
     BoardStack,
     Stack,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct RawCard(pub u8);
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct Card(pub u8);
 
 impl From<RawCard> for Card {
@@ -21,20 +22,48 @@ impl From<RawCard> for Card {
     }
 }
 
-pub type Move = (MatchType, i8, (RawCard, Option<RawCard>));
+pub type Move = (MatchType, i32, (RawCard, Option<RawCard>));
 
-#[derive(Debug)]
+pub fn move_sort(
+    (a_move_type, a_draws, (a_left_card, a_right_card)): &Move,
+    (b_move_type, b_draws, (b_left_card, b_right_card)): &Move,
+) -> Ordering {
+    // 1. Number of draws first
+    if a_draws != b_draws {
+        return a_draws.cmp(b_draws);
+    }
+    // 2. Then move type
+    if a_move_type != b_move_type {
+        return a_move_type.cmp(b_move_type);
+    }
+
+    // 3. The left card, if not the same
+    if a_left_card != b_left_card {
+        return a_left_card.cmp(b_left_card);
+    }
+    // 4. less/greated depending on right card being None
+    if a_right_card.is_none() && b_right_card.is_some() {
+        return Ordering::Less;
+    }
+    if a_right_card.is_some() && b_right_card.is_none() {
+        return Ordering::Greater;
+    }
+    // 5. The right card if both are Some
+    a_right_card.cmp(b_right_card)
+}
+
+#[derive(Debug, Clone)]
 pub struct Board {
     pub cards: Vec<RawCard>,
     card_counts: HashMap<Card, u8>,
 
-    stack: Vec<RawCard>,
-    stack_idx: u8,
+    pub stack: Vec<RawCard>,
+    pub stack_idx: i32,
     stack_counts: HashMap<Card, u8>,
 
-    leaf_idxs: HashSet<u8>,
+    pub leaf_idxs: HashSet<u8>,
 
-    pub moves: u8,
+    pub moves: i32,
     pub completed: bool,
 }
 
@@ -88,6 +117,28 @@ impl Board {
         }
     }
 
+    pub fn get_state(&self) -> String {
+        let moves = self.moves.to_string();
+        let mut card_state = self
+            .leaf_idxs
+            .iter()
+            .map(|idx| idx.to_string())
+            .collect::<Vec<String>>();
+        card_state.sort();
+        let card_state = card_state.join(":");
+
+        let mut stack_state = self
+            .stack
+            .iter()
+            .map(|card| card.0.to_string())
+            .collect::<Vec<String>>();
+        stack_state.sort();
+        let stack_state = stack_state.join(":");
+        let stack_idx = self.stack_idx.to_string();
+
+        format!("{}|{}|{}|{}", moves, card_state, stack_state, stack_idx)
+    }
+
     pub fn remove_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
         // Get the indexes of the cards we are going to remove
         // TODO: Calling cards.contains for each card in cards.. O(n*m)? Can we improve? Cards to
@@ -133,9 +184,9 @@ impl Board {
         }
 
         // Also reduce the counts..
-        *self.stack_counts.get_mut(&(left.into())).unwrap() -= 1;
+        *self.card_counts.get_mut(&(left.into())).unwrap() -= 1;
         if let Some(right) = right {
-            *self.stack_counts.get_mut(&(right.into())).unwrap() -= 1;
+            *self.card_counts.get_mut(&(right.into())).unwrap() -= 1;
         }
     }
 
@@ -148,7 +199,7 @@ impl Board {
             }
         }
 
-        let mut moves = vec![];
+        let mut moves: Vec<Move> = vec![];
         let solo_cards: Vec<Card> = self
             .cards
             .iter()
@@ -160,7 +211,10 @@ impl Board {
         let mut moves_on_table = false;
         let mut already_matched: HashSet<RawCard> = HashSet::new();
 
-        for leaf in self.leaves() {
+        let mut leaves: Vec<RawCard> = self.leaves().into_iter().collect();
+        leaves.sort();
+
+        for leaf in leaves {
             let potential_matches: Vec<RawCard> = self
                 .leaves()
                 .into_iter()
@@ -193,10 +247,10 @@ impl Board {
             // We have some potential matches to make in the stack.. let's find them
             let draws = self.get_stack_draws(leaf_match);
             for draw in draws {
-                let mut stack_card_idx = self.stack_idx as i8 + draw;
-                if stack_card_idx > self.stack.len() as i8 {
+                let mut stack_card_idx = self.stack_idx + draw;
+                if stack_card_idx > self.stack.len() as i32 {
                     // Need to wrap the stack!
-                    stack_card_idx -= self.stack.len() as i8 + 1 // One for flippage
+                    stack_card_idx -= self.stack.len() as i32 + 1 // One for flippage
                 }
                 let stack_card = self.stack[stack_card_idx as usize];
                 if solo_cards.contains(&leaf_val) && draw <= 0 {
@@ -220,7 +274,7 @@ impl Board {
         // Check for any moves that match in the stack
         let stack_moves = self.get_stack_moves();
         if !moves_on_table {
-            for (move_type, draws, cards) in stack_moves.into_iter() {
+            for (move_type, draws, cards) in stack_moves.clone().into_iter() {
                 if draws != 0 {
                     continue;
                 }
@@ -231,14 +285,16 @@ impl Board {
                     return vec![(move_type, draws, cards)];
                 }
             }
-        } else {
-            moves.extend(stack_moves);
         }
+        moves.extend(stack_moves);
+
+        // Sort the moves by:
+        moves.sort_by(move_sort);
 
         moves
     }
 
-    fn get_stack_draws(&self, card: Card) -> Vec<i8> {
+    fn get_stack_draws(&self, card: Card) -> Vec<i32> {
         let mut draws = vec![];
 
         let stack_len = self.stack.len();
@@ -255,18 +311,18 @@ impl Board {
         for (idx, raw_card) in self.stack.iter().skip(self.stack_idx as usize).enumerate() {
             let stack_card: Card = (*raw_card).into();
             if stack_card == card {
-                draws.push(idx as i8);
+                draws.push(idx as i32);
             }
         }
         for (idx, raw_card) in self
             .stack
             .iter()
-            .take(max((self.stack_idx as i8) - 1, 0) as usize)
+            .take(max((self.stack_idx) - 1, 0) as usize)
             .enumerate()
         {
             let stack_card: Card = (*raw_card).into();
             if stack_card == card {
-                draws.push(idx as i8 + stack_len as i8 - self.stack_idx as i8 + 1);
+                draws.push(idx as i32 + stack_len as i32 - self.stack_idx + 1);
             }
         }
 
@@ -279,7 +335,7 @@ impl Board {
         if self.stack_idx > 0 {
             // Check if the two visible cards match
             let left = self.stack[(self.stack_idx as usize) - 1];
-            if self.stack_idx < self.stack.len() as u8 {
+            if self.stack_idx < self.stack.len() as i32 {
                 let right = self.stack[self.stack_idx as usize];
                 if cards_match(left, right) {
                     moves.insert((MatchType::Stack, 0, (left, Some(right))));
@@ -292,7 +348,7 @@ impl Board {
         }
 
         // Lets check the right side solo as well for a king
-        if self.stack_idx < self.stack.len() as u8 {
+        if self.stack_idx < self.stack.len() as i32 {
             let right = self.stack[self.stack_idx as usize];
             if Card::from(right).0 == 13 {
                 moves.insert((MatchType::Stack, 0, (right, None)));
@@ -307,9 +363,9 @@ impl Board {
         {
             if Card::from(*right).0 == 13 {
                 // Get rid of that king!
-                moves.insert((MatchType::Stack, draw as i8 + 1, (*right, None)));
+                moves.insert((MatchType::Stack, draw as i32 + 1, (*right, None)));
             } else if cards_match(*left, *right) {
-                moves.insert((MatchType::Stack, draw as i8 + 1, (*left, Some(*right))));
+                moves.insert((MatchType::Stack, draw as i32 + 1, (*left, Some(*right))));
             }
         }
 
@@ -323,7 +379,7 @@ impl Board {
             if cards_match(*left, *right) {
                 moves.insert((
                     MatchType::Stack,
-                    draw as i8 + stack_len as i8 - self.stack_idx as i8 + 1,
+                    draw as i32 + stack_len as i32 - self.stack_idx + 1,
                     (*left, Some(*right)),
                 ));
             }
@@ -332,35 +388,45 @@ impl Board {
         moves
     }
 
-    fn remove_stack_cards(&mut self, (card, stack_card): (RawCard, Option<RawCard>)) {
-        if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == card {
+    fn remove_stack_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
+        if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == left {
             // Need to shift back since the right card will have moved up
             self.stack_idx -= 1;
         }
-        let card_idx = self.stack.iter().position(|&c| c == card).unwrap();
+        let card_idx = self.stack.iter().position(|&c| c == left).unwrap();
         self.stack.remove(card_idx);
-        *self.stack_counts.get_mut(&(card.into())).unwrap() -= 1;
+        *self.stack_counts.get_mut(&(left.into())).unwrap() -= 1;
 
-        if let Some(stack_card) = stack_card {
-            if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == stack_card {
+        if let Some(right) = right {
+            if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == right {
                 // Need to shift back since the right card will have moved up
                 self.stack_idx -= 1;
             }
-            let stack_card_idx = self.stack.iter().position(|&c| c == stack_card).unwrap();
+            //let stack_card_idx = self.stack.iter().position(|&c| c == right).unwrap();
+            let stack_card_idx = match self.stack.iter().position(|&c| c == right) {
+                Some(idx) => idx,
+                None => {
+                    println!("Just removed card {:?} from stack", left);
+                    println!("Couldn't find card {:?} in stack", right);
+                    println!("Stack: {:?}", self.stack);
+                    panic!();
+                }
+            };
+
             self.stack.remove(stack_card_idx);
-            *self.stack_counts.get_mut(&(stack_card.into())).unwrap() -= 1;
+            *self.stack_counts.get_mut(&(right.into())).unwrap() -= 1;
         }
     }
 
-    fn stack_draw(&mut self, draws: i8) {
+    fn stack_draw(&mut self, draws: i32) {
         if draws == 0 {
             return;
         }
-        self.stack_idx += draws as u8;
-        if self.stack_idx > self.stack.len() as u8 {
-            self.stack_idx -= self.stack.len() as u8 + 1; // Extra one for the stack reset
+        self.stack_idx += draws;
+        if self.stack_idx > self.stack.len() as i32 {
+            self.stack_idx -= self.stack.len() as i32 + 1; // Extra one for the stack reset
         }
-        self.moves += draws as u8;
+        self.moves += draws;
     }
 
     pub fn leaves(&self) -> HashSet<RawCard> {
@@ -377,10 +443,18 @@ impl Board {
                 // Should raise value error if flipped, not wasting cycles on error checking,
                 // shouldn't be mixed up in the first place!
                 self.remove_stack_cards((stack_card, None));
-                *self.card_counts.get_mut(&(board_card.into())).unwrap() -= 1;
+                *self.card_counts.get_mut(&(stack_card.into())).unwrap() -= 1;
                 self.remove_cards((board_card, None));
             }
             (MatchType::Stack, (left, right)) => {
+                if let Some(right) = right {
+                    if left == right {
+                        println!("Stack: {:?}", self.stack);
+                        println!("Move: {:?}", r#move);
+                        panic!("Illegal move");
+                    }
+                }
+
                 self.remove_stack_cards((left, right));
                 *self.card_counts.get_mut(&(left.into())).unwrap() -= 1;
                 if let Some(right) = right {
@@ -583,5 +657,169 @@ mod test {
         let moves = board.get_moves();
 
         assert_eq!(moves.len(), 20);
+    }
+
+    #[test]
+    fn test_move_type_order() {
+        let mut move_types = vec![MatchType::BoardStack, MatchType::Stack, MatchType::Board];
+
+        move_types.sort();
+
+        assert_eq!(
+            move_types,
+            vec![MatchType::Board, MatchType::BoardStack, MatchType::Stack]
+        );
+    }
+
+    #[test]
+    fn test_raw_card_order() {
+        let mut cards = vec![
+            RawCard(10),
+            RawCard(21),
+            RawCard(3),
+            RawCard(7),
+            RawCard(1),
+            RawCard(2),
+            RawCard(14),
+        ];
+
+        cards.sort();
+
+        assert_eq!(
+            cards,
+            vec![
+                RawCard(1),
+                RawCard(2),
+                RawCard(3),
+                RawCard(7),
+                RawCard(10),
+                RawCard(14),
+                RawCard(21)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_board_get_moves_has_a_stable_order() {
+        let mut board_a = get_base_board();
+        let mut board_b = get_base_board();
+
+        // Play moves to get to 20 moves, as the first list of moves is just one move
+        let r#move: Move = board_a.get_moves().into_iter().next().unwrap();
+        board_a.play_move(r#move);
+        let r#move: Move = board_b.get_moves().into_iter().next().unwrap();
+        board_b.play_move(r#move);
+
+        let moves_a = board_a.get_moves();
+        let moves_b = board_b.get_moves();
+
+        println!("{:?}", moves_a);
+        println!("{:?}", moves_b);
+
+        assert_eq!(moves_a.len(), 20);
+        assert_eq!(moves_b.len(), 20);
+
+        assert_eq!(moves_a, moves_b);
+
+        let board_c = board_a.clone();
+        let moves_c = board_c.get_moves();
+
+        assert_eq!(moves_a, moves_c);
+    }
+
+    #[test]
+    fn test_skip_and_take() {
+        let arr = vec![0, 1, 2, 3, 4, 5, 6];
+
+        let pivot = 3;
+
+        // skipping arr[pivot:] == [3, 4, 5, 6]
+        let a = arr.iter().skip(pivot).collect::<Vec<_>>();
+        assert_eq!(a, vec![&3, &4, &5, &6]);
+
+        // taking arr[:pivot] == [0, 1, 2]
+        let b = arr.iter().take(pivot).collect::<Vec<_>>();
+        assert_eq!(b, vec![&0, &1, &2]);
+    }
+
+    #[test]
+    fn test_stack_draws_king_in_stack() {
+        let cards = vec![
+            RawCard(1),
+            RawCard(6),
+            RawCard(0),
+            RawCard(7),
+            RawCard(13),
+            RawCard(12),
+            RawCard(9),
+            RawCard(14),
+            RawCard(22),
+            RawCard(10),
+            RawCard(11),
+            RawCard(20),
+            RawCard(35),
+            RawCard(5),
+            RawCard(23),
+            RawCard(25),
+            RawCard(26),
+            RawCard(8),
+            RawCard(2),
+            RawCard(33),
+            RawCard(18),
+            RawCard(38),
+            RawCard(19),
+            RawCard(31),
+            RawCard(4),
+            RawCard(36),
+            RawCard(39),
+            RawCard(24),
+        ];
+        let stack = vec![
+            RawCard(3),
+            RawCard(37),
+            RawCard(17),
+            RawCard(16),
+            RawCard(29),
+            RawCard(44),
+            RawCard(50),
+            RawCard(49),
+            RawCard(21),
+            RawCard(34),
+            RawCard(15),
+            RawCard(47),
+            RawCard(28),
+            RawCard(30),
+            RawCard(51),
+            RawCard(48),
+            RawCard(46),
+            RawCard(41),
+            RawCard(42),
+            RawCard(43),
+        ];
+        let leaf_idxs = vec![18, 17, 22];
+
+        let mut board = Board::new(cards, stack, leaf_idxs);
+        board.stack_idx = 11;
+        board.moves = 18;
+
+        let stack_moves: Vec<Move> = board.get_stack_moves().into_iter().collect::<Vec<_>>();
+        assert_eq!(
+            stack_moves,
+            vec![(MatchType::Stack, 3, (RawCard(51), None))]
+        );
+
+        let moves = board.get_moves();
+        assert_eq!(
+            moves,
+            vec![
+                (MatchType::Stack, 3, (RawCard(51), None)),
+                (MatchType::BoardStack, 4, (RawCard(2), Some(RawCard(48)))),
+                (MatchType::BoardStack, 7, (RawCard(8), Some(RawCard(42)))),
+                (MatchType::BoardStack, 10, (RawCard(8), Some(RawCard(3)))),
+                (MatchType::BoardStack, 13, (RawCard(8), Some(RawCard(16)))),
+                (MatchType::BoardStack, 14, (RawCard(8), Some(RawCard(29)))),
+                (MatchType::BoardStack, 15, (RawCard(19), Some(RawCard(44))))
+            ]
+        );
     }
 }
