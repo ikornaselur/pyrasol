@@ -1,22 +1,85 @@
-use pyramid_solver::board::Board;
+use pyramid_solver::board::{Board, Card, RawCard};
 use pyramid_solver::{parse_board, pretty_print_board, pretty_print_move};
 use std::collections::HashSet;
 
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    /// The board to solve
+    ///
+    /// The board to solve as a string of characters, where each character represents a card.
+    /// Cards from 2-9 are just represented as their number, while 10, Jack, Queen, King, and Ace
+    /// are represented as 0, j, q, k, and a respectively. Cards are read from left to right, top
+    /// to bottom.
+    /// Note: Ace can be either 1 or a
+    ///
+    /// Example:
+    ///     jj6j88a95k3ka02j4q32k0767qk7
+    board: String,
+
+    /// The stack
+    ///
+    /// The stack as a string of characters, where each character represents a card. Cards from
+    /// 2-9 are just represented as their number, while 10, Jack, Queen, King, and Ace are
+    /// represented as 0, j, q, k, and a respectively. Cards are read from left to right.
+    /// Note: Ace can be either 1 or a
+    ///
+    /// Example:
+    ///     68480a55q69a2339527q4490
+    stack: String,
+
+    /// Verbose output
+    #[arg(long, short, default_value_t = false)]
+    verbose: bool,
+
+    // Max depth to simulate
+    #[arg(long, short, default_value_t = 60)]
+    max_depth: usize,
+}
+
 fn main() {
-    let (cards, stack) = parse_board(
-        "jj6j88a95k3ka02j4q32k0767qk7".to_string(),
-        "68480a55q69a2339527q4490".to_string(),
-    );
+    let args = Args::parse();
+
+    let (board_cards, stack_cards) = parse_board(args.board, args.stack);
+    validate_board(&board_cards, &stack_cards);
     let leaf_idxs: Vec<u8> = vec![21, 22, 23, 24, 25, 26, 27];
-    let board = Board::new(cards, stack, leaf_idxs);
+    let board = Board::new(board_cards, stack_cards, leaf_idxs);
     pretty_print_board(&board);
     let first_top_moves = 3;
     let first_games = 5;
     let top_moves = 2;
 
-    let solution =
-        simulate_games(board.clone(), 50, top_moves, first_top_moves, first_games, false).unwrap();
+    let solution = simulate_games(
+        board.clone(),
+        args.max_depth,
+        top_moves,
+        first_top_moves,
+        first_games,
+        args.verbose,
+    )
+    .unwrap();
     describe_solution(board, solution, false);
+}
+
+fn validate_board(board_cards: &[RawCard], stack_cards: &[RawCard]) {
+    let mut card_counts: Vec<u8> = vec![0; 13];
+
+    for card in board_cards.iter() {
+        let card_value = Card::from(*card).0 - 1;
+        card_counts[card_value as usize] += 1;
+    }
+    for card in stack_cards.iter() {
+        let card_value = Card::from(*card).0 - 1;
+        card_counts[card_value as usize] += 1;
+    }
+
+    for count in card_counts.iter() {
+        if *count != 4 {
+            panic!("Invalid board: card {} appears {} times", count, *count);
+        }
+    }
 }
 
 fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
@@ -49,7 +112,7 @@ fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
         if !verbose {
             pretty_print_move(&board, moves_made as u8, *r#move);
         }
-        
+
         board.play_move(*r#move);
 
         moves_made += 1 + r#move.1;
@@ -58,7 +121,7 @@ fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
 
 fn simulate_games(
     board: Board,
-    known_min_moves: usize,
+    max_depth: usize,
     top_moves: usize,
     first_top_moves: usize,
     first_games: usize,
@@ -67,7 +130,7 @@ fn simulate_games(
     let mut seen_states: HashSet<String> = HashSet::new();
 
     // Pre-create 60 queues for different move counts
-    let mut queues: Vec<Vec<(Board, Vec<usize>)>> = vec![vec![]; 60];
+    let mut queues: Vec<Vec<(Board, Vec<usize>)>> = vec![vec![]; max_depth];
 
     // Initial board at 0 moves
     queues[0].push((board, vec![]));
@@ -105,7 +168,7 @@ fn simulate_games(
                 if *draws > 0 && moves_played > max_moves {
                     break;
                 }
-                if *draws + board.moves > known_min_moves as i32 {
+                if *draws + board.moves + 1 >= max_depth as i32 {
                     break;
                 }
 
@@ -121,8 +184,11 @@ fn simulate_games(
                 let mut moves_made = moves_made.clone();
                 moves_made.push(moves_played + 1);
 
-                let sub_queue = queues.get_mut(new_board.moves as usize).unwrap();
-                sub_queue.push((new_board, moves_made));
+                let sub_queue = queues.get_mut(new_board.moves as usize);
+                match sub_queue {
+                    Some(sub_queue) => sub_queue.push((new_board, moves_made)),
+                    None => panic!("No queue for move count {}", new_board.moves),
+                };
             }
         }
 

@@ -57,7 +57,7 @@ pub fn parse_board(cards_str: String, stack_str: String) -> (Vec<RawCard>, Vec<R
         let val = match char {
             'a' | 'A' => 1,
             'j' | 'J' => 11,
-            'q' | 'Q' => 12,
+            'q' | 'Q' | 'd' | 'D' => 12,
             'k' | 'K' => 13,
             '0' => 10,
             '1'..='9' => char.to_digit(10).unwrap() as u8,
