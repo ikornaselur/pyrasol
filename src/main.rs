@@ -1,10 +1,10 @@
 use colored::Colorize;
-use std::sync::{Arc, Mutex};
-use pyramid_solver::validators::validate_board;
-use pyramid_solver::Board;
-use pyramid_solver::{parse_board, pretty_print_board, pretty_print_move};
+use pyrasol::validators::validate_board;
+use pyrasol::Board;
+use pyrasol::{parse_board, pretty_print_board, pretty_print_move};
 use rayon::prelude::*;
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 
@@ -119,11 +119,15 @@ fn simulate_games(
     let seen_states = Arc::new(Mutex::new(HashSet::new()));
 
     // Pre-create 60 queues for different move counts
-    let queues  = Arc::new(Mutex::new(vec![vec![]; max_depth]));
+    let queues = Arc::new(Mutex::new(vec![vec![]; max_depth]));
 
     // Initial board at 0 moves
-    queues.lock().unwrap().get_mut(0).unwrap().push((board, vec![]));
-    // queues[0].push((board, vec![]));
+    queues
+        .lock()
+        .unwrap()
+        .get_mut(0)
+        .unwrap()
+        .push((board, vec![]));
 
     let mut queue_num = 0;
     while queue_num < max_depth {
