@@ -3,6 +3,7 @@ use crate::card::{Card, MatchType, RawCard};
 use crate::r#move::{move_sort, Move};
 use crate::utils::{cards_match, match_card};
 use std::cmp::max;
+use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -14,7 +15,7 @@ pub struct Board {
     pub(crate) stack_idx: i32,
     stack_counts: HashMap<Card, u8>,
 
-    pub(crate) leaf_idxs: HashSet<u8>,
+    pub(crate) leaf_idxs: BTreeSet<u8>,
 
     pub moves: i32,
     pub completed: bool,
@@ -56,7 +57,7 @@ impl Board {
             *stack_counts.get_mut(&(*raw_card).into()).unwrap() += 1;
         }
 
-        let leaf_idxs: HashSet<u8> = HashSet::from_iter(leaf_idxs);
+        let leaf_idxs: BTreeSet<u8> = BTreeSet::from_iter(leaf_idxs);
 
         Board {
             cards,
@@ -71,25 +72,24 @@ impl Board {
     }
 
     pub fn get_state(&self) -> String {
-        let moves = self.moves.to_string();
-        let mut card_state = self
+        let card_state = self
             .leaf_idxs
             .iter()
-            .map(|idx| idx.to_string())
-            .collect::<Vec<String>>();
-        card_state.sort();
-        let card_state = card_state.join(":");
+            .map(|&idx| idx.to_string())
+            .collect::<Vec<String>>()
+            .join(":");
 
-        let mut stack_state = self
+        let stack_state = self
             .stack
             .iter()
             .map(|card| card.0.to_string())
-            .collect::<Vec<String>>();
-        stack_state.sort();
-        let stack_state = stack_state.join(":");
-        let stack_idx = self.stack_idx.to_string();
+            .collect::<Vec<String>>()
+            .join(":");
 
-        format!("{}|{}|{}|{}", moves, card_state, stack_state, stack_idx)
+        format!(
+            "{}|{}|{}|{}",
+            self.moves, card_state, stack_state, self.stack_idx
+        )
     }
 
     pub fn remove_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
@@ -120,13 +120,13 @@ impl Board {
         // blockers are going in they are going to block the previous card (this
         // hardly makes any sense, but it should be obvious.. right?)
         let mut candidate_blockers: HashSet<u8> = HashSet::new();
-        for candidate in leaf_candidates.clone() {
-            candidate_blockers.extend(card_blocks(candidate).iter());
+        for candidate in leaf_candidates.iter() {
+            candidate_blockers.extend(card_blocks(*candidate).iter());
         }
 
         // And now check the ones that aren't blocked by other candidates
         for candidate in leaf_candidates.difference(&candidate_blockers) {
-            let blocked_by_set: HashSet<u8> = card_blocked_by(*candidate).into_iter().collect();
+            let blocked_by_set: BTreeSet<u8> = card_blocked_by(*candidate).into_iter().collect();
 
             if blocked_by_set.is_disjoint(&self.leaf_idxs) {
                 self.leaf_idxs.insert(*candidate);
@@ -379,8 +379,8 @@ impl Board {
         self.moves += draws;
     }
 
-    pub fn leaves(&self) -> HashSet<RawCard> {
-        HashSet::from_iter(self.leaf_idxs.iter().map(|idx| self.cards[*idx as usize]))
+    pub(crate) fn leaves(&self) -> BTreeSet<RawCard> {
+        BTreeSet::from_iter(self.leaf_idxs.iter().map(|idx| self.cards[*idx as usize]))
     }
 
     pub fn play_move(&mut self, r#move: Move) {
@@ -490,7 +490,7 @@ mod test {
 
         assert_eq!(
             board.leaves(),
-            HashSet::from([
+            BTreeSet::from([
                 RawCard(12),
                 RawCard(14),
                 RawCard(15),
@@ -508,7 +508,7 @@ mod test {
 
         assert_eq!(
             board.leaves(),
-            HashSet::from([
+            BTreeSet::from([
                 RawCard(12),
                 RawCard(14),
                 RawCard(15),
@@ -523,7 +523,7 @@ mod test {
 
         assert_eq!(
             board.leaves(),
-            HashSet::from([
+            BTreeSet::from([
                 RawCard(14),
                 RawCard(15),
                 RawCard(22),
@@ -536,7 +536,7 @@ mod test {
 
         assert_eq!(
             board.leaves(),
-            HashSet::from([
+            BTreeSet::from([
                 RawCard(18),
                 RawCard(1),
                 RawCard(9),
@@ -714,6 +714,26 @@ mod test {
                 (MatchType::BoardStack, 13, (RawCard(8), Some(RawCard(16)))),
                 (MatchType::BoardStack, 14, (RawCard(8), Some(RawCard(29)))),
                 (MatchType::BoardStack, 15, (RawCard(19), Some(RawCard(44))))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_leaves() {
+        let board = get_base_board();
+
+        let leaves: Vec<RawCard> = board.leaves().into_iter().collect();
+
+        assert_eq!(
+            leaves,
+            vec![
+                RawCard(12),
+                RawCard(14),
+                RawCard(15),
+                RawCard(16),
+                RawCard(22),
+                RawCard(23),
+                RawCard(27),
             ]
         );
     }
