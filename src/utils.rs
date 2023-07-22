@@ -1,4 +1,6 @@
-use crate::board::{Board, Card, Move, RawCard};
+use crate::board::Board;
+use crate::card::{Card, RawCard};
+use crate::r#move::Move;
 use colored::{ColoredString, Colorize};
 use std::collections::HashMap;
 
@@ -131,7 +133,12 @@ fn pretty_print_card(card: RawCard) -> ColoredString {
     .green()
 }
 
-pub fn pretty_print_move(board: &Board, idx: u8, (_, draws, (left_card, right_card)): Move, split_draws: bool) {
+pub fn pretty_print_move(
+    board: &Board,
+    idx: u8,
+    (_, draws, (left_card, right_card)): Move,
+    split_draws: bool,
+) {
     if split_draws {
         if draws > 0 {
             println!("[{}] {}", idx, format!("Draw {} cards", draws).blue());
