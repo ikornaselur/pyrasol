@@ -1,3 +1,4 @@
+use colored::Colorize;
 use pyramid_solver::board::{Board, Card, RawCard};
 use pyramid_solver::{parse_board, pretty_print_board, pretty_print_move};
 use std::collections::HashSet;
@@ -46,7 +47,9 @@ fn main() {
     validate_board(&board_cards, &stack_cards);
     let leaf_idxs: Vec<u8> = vec![21, 22, 23, 24, 25, 26, 27];
     let board = Board::new(board_cards, stack_cards, leaf_idxs);
+
     pretty_print_board(&board);
+
     let first_top_moves = 3;
     let first_games = 5;
     let top_moves = 2;
@@ -60,6 +63,7 @@ fn main() {
         args.verbose,
     )
     .unwrap();
+
     describe_solution(board, solution, false);
 }
 
@@ -100,7 +104,7 @@ fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
                 if idx + 1 == *move_num {
                     print!("> ");
                 }
-                pretty_print_move(&board, idx as u8 + 1, *r#move);
+                pretty_print_move(&board, idx as u8 + 1, *r#move, true);
             }
         }
 
@@ -110,13 +114,14 @@ fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
         };
 
         if !verbose {
-            pretty_print_move(&board, moves_made as u8, *r#move);
+            pretty_print_move(&board, moves_made as u8, *r#move, true);
         }
 
         board.play_move(*r#move);
 
         moves_made += 1 + r#move.1;
     }
+    println!("[{}] {}", board.moves, "All done!".green());
 }
 
 fn simulate_games(
@@ -136,7 +141,7 @@ fn simulate_games(
     queues[0].push((board, vec![]));
 
     let mut queue_num = 0;
-    while queue_num < 60 {
+    while queue_num < max_depth {
         let queue = queues.get(queue_num).unwrap().clone();
         let queue_size = queue.len();
 
@@ -146,6 +151,10 @@ fn simulate_games(
 
         for (board, moves_made) in queue {
             if board.completed {
+                println!(
+                    "{}",
+                    format!("Solution found with {} moves made", board.moves).green()
+                );
                 return Ok(moves_made);
             }
 
@@ -194,6 +203,11 @@ fn simulate_games(
 
         queue_num += 1;
     }
+
+    println!(
+        "{}",
+        format!("No solution found with a max depth of {}", max_depth).red()
+    );
 
     Ok(vec![])
 }

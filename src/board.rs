@@ -274,7 +274,7 @@ impl Board {
         // Check for any moves that match in the stack
         let stack_moves = self.get_stack_moves();
         if !moves_on_table {
-            for (move_type, draws, cards) in stack_moves.into_iter() {
+            for (move_type, draws, cards) in stack_moves.clone().into_iter() {
                 if draws != 0 {
                     continue;
                 }
@@ -285,9 +285,8 @@ impl Board {
                     return vec![(move_type, draws, cards)];
                 }
             }
-        } else {
-            moves.extend(stack_moves);
         }
+        moves.extend(stack_moves);
 
         // Sort the moves by:
         moves.sort_by(move_sort);
@@ -726,5 +725,101 @@ mod test {
         let moves_c = board_c.get_moves();
 
         assert_eq!(moves_a, moves_c);
+    }
+
+    #[test]
+    fn test_skip_and_take() {
+        let arr = vec![0, 1, 2, 3, 4, 5, 6];
+
+        let pivot = 3;
+
+        // skipping arr[pivot:] == [3, 4, 5, 6]
+        let a = arr.iter().skip(pivot).collect::<Vec<_>>();
+        assert_eq!(a, vec![&3, &4, &5, &6]);
+
+        // taking arr[:pivot] == [0, 1, 2]
+        let b = arr.iter().take(pivot).collect::<Vec<_>>();
+        assert_eq!(b, vec![&0, &1, &2]);
+    }
+
+    #[test]
+    fn test_stack_draws_king_in_stack() {
+        let cards = vec![
+            RawCard(1),
+            RawCard(6),
+            RawCard(0),
+            RawCard(7),
+            RawCard(13),
+            RawCard(12),
+            RawCard(9),
+            RawCard(14),
+            RawCard(22),
+            RawCard(10),
+            RawCard(11),
+            RawCard(20),
+            RawCard(35),
+            RawCard(5),
+            RawCard(23),
+            RawCard(25),
+            RawCard(26),
+            RawCard(8),
+            RawCard(2),
+            RawCard(33),
+            RawCard(18),
+            RawCard(38),
+            RawCard(19),
+            RawCard(31),
+            RawCard(4),
+            RawCard(36),
+            RawCard(39),
+            RawCard(24),
+        ];
+        let stack = vec![
+            RawCard(3),
+            RawCard(37),
+            RawCard(17),
+            RawCard(16),
+            RawCard(29),
+            RawCard(44),
+            RawCard(50),
+            RawCard(49),
+            RawCard(21),
+            RawCard(34),
+            RawCard(15),
+            RawCard(47),
+            RawCard(28),
+            RawCard(30),
+            RawCard(51),
+            RawCard(48),
+            RawCard(46),
+            RawCard(41),
+            RawCard(42),
+            RawCard(43),
+        ];
+        let leaf_idxs = vec![18, 17, 22];
+
+        let mut board = Board::new(cards, stack, leaf_idxs);
+        board.stack_idx = 11;
+        board.moves = 18;
+
+        let stack_moves: Vec<Move> = board.get_stack_moves().into_iter().collect::<Vec<_>>();
+        assert_eq!(
+            stack_moves,
+            vec![(MatchType::Stack, 3, (RawCard(51), None))]
+        );
+
+        let moves = board.get_moves();
+        assert_eq!(
+            moves,
+            vec![
+                (MatchType::Stack, 3, (RawCard(51), None)),
+                (MatchType::BoardStack, 4, (RawCard(2), Some(RawCard(48)))),
+                (MatchType::BoardStack, 7, (RawCard(8), Some(RawCard(42)))),
+                (MatchType::BoardStack, 10, (RawCard(8), Some(RawCard(3)))),
+                (MatchType::BoardStack, 13, (RawCard(8), Some(RawCard(16)))),
+                (MatchType::BoardStack, 14, (RawCard(8), Some(RawCard(29)))),
+                (MatchType::BoardStack, 15, (RawCard(19), Some(RawCard(44))))
+            ]
+        );
     }
 }

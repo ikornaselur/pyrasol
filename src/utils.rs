@@ -131,31 +131,52 @@ fn pretty_print_card(card: RawCard) -> ColoredString {
     .green()
 }
 
-pub fn pretty_print_move(board: &Board, idx: u8, (_, draws, (left_card, right_card)): Move) {
-    let draw_str = if draws > 0 {
-        format!("Draw {} cards and ", draws).blue()
+pub fn pretty_print_move(board: &Board, idx: u8, (_, draws, (left_card, right_card)): Move, split_draws: bool) {
+    if split_draws {
+        if draws > 0 {
+            println!("[{}] {}", idx, format!("Draw {} cards", draws).blue());
+        }
+
+        let cards_str = match (left_card, right_card) {
+            (left_card, None) => format!(
+                "Remove {} {}",
+                pretty_print_card(left_card),
+                get_loc(board, left_card),
+            ),
+            (left_card, Some(right_card)) => format!(
+                "Match {} {} and {} {}",
+                pretty_print_card(right_card),
+                get_loc(board, right_card),
+                pretty_print_card(left_card),
+                get_loc(board, left_card),
+            ),
+        };
+
+        println!("[{}] {}", idx as i32 + draws, cards_str);
     } else {
-        String::from("").blue()
-    };
+        if draws > 0 {
+            print!("[{}] {}", idx, format!("Draw {} cards and ", draws).blue());
+        } else {
+            print!("[{}] ", idx);
+        }
 
-    let cards_str = match (left_card, right_card) {
-        (left_card, None) => format!(
-            "{}emove {} {}",
-            if draw_str.is_empty() { "R" } else { "r" },
-            pretty_print_card(left_card),
-            get_loc(board, left_card),
-        ),
-        (left_card, Some(right_card)) => format!(
-            "{}atch {} {} and {} {}",
-            if draw_str.is_empty() { "M" } else { "m" },
-            pretty_print_card(left_card),
-            get_loc(board, left_card),
-            pretty_print_card(right_card),
-            get_loc(board, right_card),
-        ),
-    };
+        let cards_str = match (left_card, right_card) {
+            (left_card, None) => format!(
+                "Remove {} {}",
+                pretty_print_card(left_card),
+                get_loc(board, left_card),
+            ),
+            (left_card, Some(right_card)) => format!(
+                "Match {} {} and {} {}",
+                pretty_print_card(right_card),
+                get_loc(board, right_card),
+                pretty_print_card(left_card),
+                get_loc(board, left_card),
+            ),
+        };
 
-    println!("[{}] {}{}", idx, draw_str, cards_str);
+        println!("{}", cards_str);
+    }
 }
 
 fn card_pos(board: &Board, card: RawCard) -> String {
