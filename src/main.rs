@@ -131,14 +131,14 @@ fn simulate_games(
 
     let mut queue_num = 0;
     while queue_num < max_depth {
-        let queue = queues.lock().unwrap().get(queue_num).unwrap().clone();
+        let mut queue = queues.lock().unwrap().get(queue_num).unwrap().clone();
         let queue_size = queue.len();
 
         if verbose {
             println!("Queue {} size: {}", queue_num, queue_size);
         }
 
-        let result = queue.par_iter().find_map_any(|(board, moves_made)| {
+        let result = queue.par_drain(..).find_map_any(|(board, moves_made)| {
             if board.completed {
                 println!(
                     "{}",
