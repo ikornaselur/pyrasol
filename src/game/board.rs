@@ -18,11 +18,17 @@ pub struct Board {
     pub(crate) leaf_idxs: BTreeSet<usize>,
 
     pub moves: i32,
+    clear_all: bool,
     pub completed: bool,
 }
 
 impl Board {
-    pub fn new(cards: Vec<RawCard>, stack: Vec<RawCard>, leaf_idxs: Vec<usize>) -> Board {
+    pub fn new(
+        cards: Vec<RawCard>,
+        stack: Vec<RawCard>,
+        leaf_idxs: Vec<usize>,
+        clear_all: bool,
+    ) -> Board {
         let card_counts = [4; 13];
         let mut stack_counts = [0; 13];
         for raw_card in &stack {
@@ -45,6 +51,7 @@ impl Board {
             leaf_idxs,
             moves: 0,
             completed: false,
+            clear_all,
         }
     }
 
@@ -90,10 +97,9 @@ impl Board {
         for card_idx in card_idxs {
             self.leaf_idxs.remove(&card_idx);
 
-            if card_idx == 0 {
+            if card_idx == 0 && (!self.clear_all || self.stack.is_empty()) {
                 self.completed = true;
             }
-
             let (blocked_card, count) = card_directly_blocks(card_idx);
             leaf_candidates.insert(blocked_card);
             if count > 1 {
@@ -361,6 +367,11 @@ impl Board {
             self.stack.remove(stack_card_idx);
             self.stack_counts[(right.0 % 13) as usize] -= 1;
         }
+
+
+        if self.clear_all && self.stack.is_empty() && self.leaf_idxs.len() == 1 {
+            self.completed = true;
+        }
     }
 
     fn stack_draw(&mut self, draws: i32) {
@@ -476,7 +487,7 @@ mod test {
         ];
         let leaf_idxs: Vec<usize> = vec![21, 22, 23, 24, 25, 26, 27];
 
-        Board::new(cards, stack, leaf_idxs)
+        Board::new(cards, stack, leaf_idxs, false)
     }
 
     #[test]
@@ -688,7 +699,7 @@ mod test {
         ];
         let leaf_idxs = vec![18, 17, 22];
 
-        let mut board = Board::new(cards, stack, leaf_idxs);
+        let mut board = Board::new(cards, stack, leaf_idxs, false);
         board.stack_idx = 11;
         board.moves = 18;
 
