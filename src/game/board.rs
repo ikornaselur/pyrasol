@@ -97,8 +97,12 @@ impl Board {
         for card_idx in card_idxs {
             self.leaf_idxs.remove(&card_idx);
 
-            if card_idx == 0 && (!self.clear_all || self.stack.is_empty()) {
-                self.completed = true;
+            if card_idx == 0 {
+                if !self.clear_all || self.stack.is_empty() {
+                    self.completed = true;
+                }
+                leaf_candidates.clear();
+                break;
             }
             let (blocked_card, count) = card_directly_blocks(card_idx);
             leaf_candidates.insert(blocked_card);
@@ -369,7 +373,7 @@ impl Board {
         }
 
 
-        if self.clear_all && self.stack.is_empty() && self.leaf_idxs.len() == 1 {
+        if self.clear_all && self.stack.is_empty() && self.leaf_idxs.is_empty() {
             self.completed = true;
         }
     }
