@@ -174,10 +174,12 @@ fn simulate_games(
                 new_board.play_move(*r#move);
 
                 let board_state = new_board.get_state();
-                if seen_states.lock().unwrap().contains(&board_state) {
+                let mut seen_states = seen_states.lock().unwrap();
+
+                if seen_states.contains(&board_state) {
                     continue;
                 }
-                seen_states.lock().unwrap().insert(board_state);
+                seen_states.insert(board_state);
 
                 let mut moves_made = moves_made.clone();
                 moves_made.push(moves_played + 1);
