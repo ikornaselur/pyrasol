@@ -1,4 +1,4 @@
-use crate::utils::card_from_raw;
+use crate::game::utils::card_from_raw;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
 pub enum MatchType {

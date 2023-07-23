@@ -1,7 +1,7 @@
-use crate::blocks::{card_blocked_by, card_blocks, card_directly_blocks};
-use crate::card::{Card, MatchType, RawCard};
-use crate::r#move::{move_sort, Move};
-use crate::utils::{cards_match, match_card};
+use crate::game::blocks::{card_blocked_by, card_blocks, card_directly_blocks};
+use crate::game::card::{Card, MatchType, RawCard};
+use crate::game::r#move::{move_sort, Move};
+use crate::game::utils::{cards_match, match_card};
 use std::cmp::max;
 use std::collections::BTreeSet;
 use std::collections::HashSet;

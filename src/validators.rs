@@ -1,4 +1,4 @@
-use crate::card::{Card, RawCard};
+use crate::game::card::{Card, RawCard};
 
 pub fn validate_board(board_cards: &[RawCard], stack_cards: &[RawCard]) {
     let mut card_counts: Vec<u8> = vec![0; 13];

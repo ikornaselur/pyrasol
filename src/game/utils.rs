@@ -1,6 +1,6 @@
-use crate::board::Board;
-use crate::card::{Card, RawCard};
-use crate::r#move::Move;
+use crate::game::board::Board;
+use crate::game::card::{Card, RawCard};
+use crate::game::r#move::Move;
 use colored::{ColoredString, Colorize};
 use std::collections::HashMap;
 

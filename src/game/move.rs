@@ -1,4 +1,4 @@
-use crate::card::{MatchType, RawCard};
+use crate::game::card::{MatchType, RawCard};
 use std::cmp::Ordering;
 
 pub type Move = (MatchType, i32, (RawCard, Option<RawCard>));
