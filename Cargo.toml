@@ -1,9 +1,10 @@
 [package]
 name = "pyrasol"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.72"
 clap = { version = "4.3.19", features = ["derive"] }
 colored = "2.0.4"
 rayon = "1.7.0"

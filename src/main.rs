@@ -1,3 +1,4 @@
+use anyhow::Result;
 use colored::Colorize;
 use pyrasol::validators::validate_board;
 use pyrasol::Board;
@@ -34,28 +35,42 @@ struct Args {
     ///     68480a55q69a2339527q4490
     stack: String,
 
+    /// Clear all the cards, including the stack
+    #[arg(long, short, default_value_t = false)]
+    clear_all: bool,
+
     /// Verbose output
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
 
-    // Max depth to simulate
+    /// Max depth to simulate
     #[arg(long, short, default_value_t = 60)]
     max_depth: usize,
+
+    /// Increased options per iteration
+    ///
+    /// Run the search by playing additional options each iteration. By default the simulation will
+    /// only run all moves that require no card draws and then 2-3 moves that require draws.
+    /// Setting this flag will increase the options tried, but slow down the overall search.
+    #[arg(long, short, default_value_t = false)]
+    increased_options: bool,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let (board_cards, stack_cards) = parse_board(args.board, args.stack);
     validate_board(&board_cards, &stack_cards);
     let leaf_idxs: Vec<usize> = vec![21, 22, 23, 24, 25, 26, 27];
-    let board = Board::new(board_cards, stack_cards, leaf_idxs);
+    let board = Board::new(board_cards, stack_cards, leaf_idxs, args.clear_all);
 
     pretty_print_board(&board);
 
-    let first_top_moves = 3;
-    let first_games = 5;
-    let top_moves = 2;
+    let (first_top_moves, first_games, top_moves) = if args.increased_options {
+        (5, 10, 3)
+    } else {
+        (3, 5, 2)
+    };
 
     let solution = simulate_games(
         board.clone(),
@@ -64,10 +79,11 @@ fn main() {
         first_top_moves,
         first_games,
         args.verbose,
-    )
-    .unwrap();
+    )?;
 
     describe_solution(board, solution, false);
+
+    Ok(())
 }
 
 fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
@@ -115,7 +131,7 @@ fn simulate_games(
     first_top_moves: usize,
     first_games: usize,
     verbose: bool,
-) -> Result<Vec<usize>, ()> {
+) -> Result<Vec<usize>> {
     let seen_states = Arc::new(Mutex::new(HashSet::new()));
 
     // Pre-create 60 queues for different move counts
@@ -174,10 +190,12 @@ fn simulate_games(
                 new_board.play_move(*r#move);
 
                 let board_state = new_board.get_state();
-                if seen_states.lock().unwrap().contains(&board_state) {
+                let mut seen_states = seen_states.lock().unwrap();
+
+                if seen_states.contains(&board_state) {
                     continue;
                 }
-                seen_states.lock().unwrap().insert(board_state);
+                seen_states.insert(board_state);
 
                 let mut moves_made = moves_made.clone();
                 moves_made.push(moves_played + 1);
