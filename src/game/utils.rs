@@ -85,9 +85,9 @@ pub fn pretty_print_board(board: &Board) {
         print!("{}", line);
         for _ in 0..(row + 1) {
             if board.leaf_idxs.contains(&idx) {
-                print!("{} ", pretty_print_card(board.board_cards[idx]).purple());
+                print!("{} ", pretty_print_card(board.board_cards[idx], false).purple());
             } else {
-                print!("{} ", pretty_print_card(board.board_cards[idx]));
+                print!("{} ", pretty_print_card(board.board_cards[idx], false));
             };
             idx += 1;
         }
@@ -99,9 +99,9 @@ pub fn pretty_print_board(board: &Board) {
     print!("Stack: ");
     for (idx, card) in board.stack.iter().enumerate() {
         if idx as i32 == board.stack_idx || idx as i32 == board.stack_idx - 1 {
-            print!("{} ", pretty_print_card(*card).purple());
+            print!("{} ", pretty_print_card(*card, false).purple());
         } else {
-            print!("{} ", pretty_print_card(*card));
+            print!("{} ", pretty_print_card(*card, false));
         }
     }
     println!();
@@ -121,10 +121,16 @@ pub fn cards_match(a: RawCard, b: RawCard) -> bool {
     match_card(a) == b
 }
 
-fn pretty_print_card(card: RawCard) -> ColoredString {
+fn pretty_print_card(card: RawCard, full_width: bool) -> ColoredString {
     match Card::from(card) {
         Card(1) => String::from("A"),
-        Card(10) => String::from("0"), // Single width values for all cards
+        Card(10) => {
+            if full_width {
+                String::from("10")
+            } else {
+                String::from("0")
+            }
+        }
         Card(11) => String::from("J"),
         Card(12) => String::from("Q"),
         Card(13) => String::from("K"),
@@ -147,14 +153,14 @@ pub fn pretty_print_move(
         let cards_str = match (left_card, right_card) {
             (left_card, None) => format!(
                 "Remove {} {}",
-                pretty_print_card(left_card),
+                pretty_print_card(left_card, true),
                 get_loc(board, left_card),
             ),
             (left_card, Some(right_card)) => format!(
                 "Match {} {} and {} {}",
-                pretty_print_card(right_card),
+                pretty_print_card(right_card, true),
                 get_loc(board, right_card),
-                pretty_print_card(left_card),
+                pretty_print_card(left_card, true),
                 get_loc(board, left_card),
             ),
         };
@@ -170,14 +176,14 @@ pub fn pretty_print_move(
         let cards_str = match (left_card, right_card) {
             (left_card, None) => format!(
                 "Remove {} {}",
-                pretty_print_card(left_card),
+                pretty_print_card(left_card, true),
                 get_loc(board, left_card),
             ),
             (left_card, Some(right_card)) => format!(
                 "Match {} {} and {} {}",
-                pretty_print_card(right_card),
+                pretty_print_card(right_card, true),
                 get_loc(board, right_card),
-                pretty_print_card(left_card),
+                pretty_print_card(left_card, true),
                 get_loc(board, left_card),
             ),
         };
