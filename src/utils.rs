@@ -84,10 +84,10 @@ pub fn pretty_print_board(board: &Board) {
         }
         print!("{}", line);
         for _ in 0..(row + 1) {
-            if board.leaf_idxs.contains(&(idx as u8)) {
-                print!("{} ", pretty_print_card(board.cards[idx]).purple());
+            if board.leaf_idxs.contains(&idx) {
+                print!("{} ", pretty_print_card(board.board_cards[idx]).purple());
             } else {
-                print!("{} ", pretty_print_card(board.cards[idx]));
+                print!("{} ", pretty_print_card(board.board_cards[idx]));
             };
             idx += 1;
         }
@@ -187,7 +187,7 @@ pub fn pretty_print_move(
 }
 
 fn card_pos(board: &Board, card: RawCard) -> String {
-    let idx = board.cards.iter().position(|&x| x == card).unwrap();
+    let idx = board.board_cards.iter().position(|&x| x == card).unwrap();
     match idx {
         0 => "on board 1st row, 1st card".to_string(),
         1..=2 => format!("on board 2nd row, card {}", idx),
@@ -201,7 +201,7 @@ fn card_pos(board: &Board, card: RawCard) -> String {
 }
 
 pub fn get_loc(board: &Board, card: RawCard) -> ColoredString {
-    if board.cards.contains(&card) {
+    if board.board_cards.contains(&card) {
         // Count the leaves
         let mut num_counts: HashMap<Card, usize> = HashMap::new();
         for leaf in board.leaves().iter() {

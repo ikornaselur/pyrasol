@@ -4,63 +4,40 @@ use crate::r#move::{move_sort, Move};
 use crate::utils::{cards_match, match_card};
 use std::cmp::max;
 use std::collections::BTreeSet;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct Board {
-    pub(crate) cards: Vec<RawCard>,
-    card_counts: HashMap<Card, u8>,
+    pub(crate) board_cards: [RawCard; 28],
+    card_counts: [u8; 13],
 
     pub(crate) stack: Vec<RawCard>,
     pub(crate) stack_idx: i32,
-    stack_counts: HashMap<Card, u8>,
+    stack_counts: [u8; 13],
 
-    pub(crate) leaf_idxs: BTreeSet<u8>,
+    pub(crate) leaf_idxs: BTreeSet<usize>,
 
     pub moves: i32,
     pub completed: bool,
 }
 
 impl Board {
-    pub fn new(cards: Vec<RawCard>, stack: Vec<RawCard>, leaf_idxs: Vec<u8>) -> Board {
-        let card_counts: HashMap<Card, u8> = HashMap::from([
-            (Card(1), 4),
-            (Card(2), 4),
-            (Card(3), 4),
-            (Card(4), 4),
-            (Card(5), 4),
-            (Card(6), 4),
-            (Card(7), 4),
-            (Card(8), 4),
-            (Card(9), 4),
-            (Card(10), 4),
-            (Card(11), 4),
-            (Card(12), 4),
-            (Card(13), 4),
-        ]);
-        let mut stack_counts: HashMap<Card, u8> = HashMap::from([
-            (Card(1), 0),
-            (Card(2), 0),
-            (Card(3), 0),
-            (Card(4), 0),
-            (Card(5), 0),
-            (Card(6), 0),
-            (Card(7), 0),
-            (Card(8), 0),
-            (Card(9), 0),
-            (Card(10), 0),
-            (Card(11), 0),
-            (Card(12), 0),
-            (Card(13), 0),
-        ]);
+    pub fn new(cards: Vec<RawCard>, stack: Vec<RawCard>, leaf_idxs: Vec<usize>) -> Board {
+        let card_counts = [4; 13];
+        let mut stack_counts = [0; 13];
         for raw_card in &stack {
-            *stack_counts.get_mut(&(*raw_card).into()).unwrap() += 1;
+            stack_counts[(raw_card.0 % 13) as usize] += 1;
         }
 
-        let leaf_idxs: BTreeSet<u8> = BTreeSet::from_iter(leaf_idxs);
+        let board_cards: [RawCard; 28] =
+            cards.iter().take(28).copied().collect::<Vec<RawCard>>()[..]
+                .try_into()
+                .unwrap();
+
+        let leaf_idxs: BTreeSet<usize> = BTreeSet::from_iter(leaf_idxs);
 
         Board {
-            cards,
+            board_cards,
             card_counts,
             stack,
             stack_idx: 0,
@@ -94,14 +71,22 @@ impl Board {
 
     pub fn remove_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
         // Get the indexes of the cards we are going to remove
-        let mut card_idxs: Vec<u8> =
-            vec![self.cards.iter().position(|&card| card == left).unwrap() as u8];
+        let mut card_idxs: Vec<usize> = vec![self
+            .board_cards
+            .iter()
+            .position(|&card| card == left)
+            .unwrap()];
         if let Some(right) = right {
-            card_idxs.push(self.cards.iter().position(|&card| card == right).unwrap() as u8);
+            card_idxs.push(
+                self.board_cards
+                    .iter()
+                    .position(|&card| card == right)
+                    .unwrap(),
+            );
         }
 
         // One by one, remove those indexes and check if we introduce a new leaf
-        let mut leaf_candidates: HashSet<u8> = HashSet::new();
+        let mut leaf_candidates: HashSet<usize> = HashSet::new();
         for card_idx in card_idxs {
             self.leaf_idxs.remove(&card_idx);
 
@@ -119,14 +104,14 @@ impl Board {
         // Remove candidates that are blocked by other candidates, as if those
         // blockers are going in they are going to block the previous card (this
         // hardly makes any sense, but it should be obvious.. right?)
-        let mut candidate_blockers: HashSet<u8> = HashSet::new();
+        let mut candidate_blockers: HashSet<usize> = HashSet::new();
         for candidate in leaf_candidates.iter() {
             candidate_blockers.extend(card_blocks(*candidate).iter());
         }
 
         // And now check the ones that aren't blocked by other candidates
         for candidate in leaf_candidates.difference(&candidate_blockers) {
-            let blocked_by_set: BTreeSet<u8> = card_blocked_by(*candidate).into_iter().collect();
+            let blocked_by_set: BTreeSet<usize> = card_blocked_by(*candidate).into_iter().collect();
 
             if blocked_by_set.is_disjoint(&self.leaf_idxs) {
                 self.leaf_idxs.insert(*candidate);
@@ -134,9 +119,9 @@ impl Board {
         }
 
         // Also reduce the counts..
-        *self.card_counts.get_mut(&(left.into())).unwrap() -= 1;
+        self.card_counts[(left.0 % 13) as usize] -= 1;
         if let Some(right) = right {
-            *self.card_counts.get_mut(&(right.into())).unwrap() -= 1;
+            self.card_counts[(right.0 % 13) as usize] -= 1;
         }
     }
 
@@ -150,11 +135,17 @@ impl Board {
         }
 
         let mut moves: Vec<Move> = vec![];
+
         let solo_cards: Vec<Card> = self
-            .cards
+            .board_cards
             .iter()
-            .map(|&raw_card| raw_card.into())
-            .filter(|&card| self.card_counts[&card] == 1)
+            .filter_map(|&card| {
+                if self.card_counts[(card.0 % 13) as usize] == 1 {
+                    Some(card.into())
+                } else {
+                    None
+                }
+            })
             .collect();
 
         // Check for matches on the table itself
@@ -189,7 +180,7 @@ impl Board {
         for leaf in self.leaves() {
             let leaf_val: Card = leaf.into();
             let leaf_match = match_card(leaf_val);
-            if self.stack_counts[&leaf_match] == 0 {
+            if self.stack_counts[(leaf_match.0 - 1) as usize] == 0 {
                 // Match is not in the satck
                 continue;
             }
@@ -224,16 +215,20 @@ impl Board {
         // Check for any moves that match in the stack
         let stack_moves = self.get_stack_moves();
         if !moves_on_table {
-            for (move_type, draws, cards) in stack_moves.clone().into_iter() {
-                if draws != 0 {
-                    continue;
-                }
-                let card_val: Card = cards.0.into();
-                if card_val.0 == 13 || solo_cards.contains(&card_val) {
-                    // If this stack move is a solo move, but we should only return it IF there are
-                    // no 0 draw moves already available
-                    return vec![(move_type, draws, cards)];
-                }
+            if let Some(pot_move) = stack_moves
+                .iter()
+                .filter(|(_, draws, _)| *draws == 0)
+                .find_map(|r#move| {
+                    let (_, _, (left_card, _)) = r#move;
+                    let card: Card = (*left_card).into();
+                    if card.0 == 13 || solo_cards.contains(&card) {
+                        Some(vec![*r#move])
+                    } else {
+                        None
+                    }
+                })
+            {
+                return pot_move;
             }
         }
         moves.extend(stack_moves);
@@ -345,7 +340,7 @@ impl Board {
         }
         let card_idx = self.stack.iter().position(|&c| c == left).unwrap();
         self.stack.remove(card_idx);
-        *self.stack_counts.get_mut(&(left.into())).unwrap() -= 1;
+        self.stack_counts[(left.0 % 13) as usize] -= 1;
 
         if let Some(right) = right {
             if self.stack_idx > 0 && self.stack[self.stack_idx as usize - 1] == right {
@@ -364,7 +359,7 @@ impl Board {
             };
 
             self.stack.remove(stack_card_idx);
-            *self.stack_counts.get_mut(&(right.into())).unwrap() -= 1;
+            self.stack_counts[(right.0 % 13) as usize] -= 1;
         }
     }
 
@@ -380,7 +375,7 @@ impl Board {
     }
 
     pub(crate) fn leaves(&self) -> BTreeSet<RawCard> {
-        BTreeSet::from_iter(self.leaf_idxs.iter().map(|idx| self.cards[*idx as usize]))
+        BTreeSet::from_iter(self.leaf_idxs.iter().map(|idx| self.board_cards[*idx]))
     }
 
     pub fn play_move(&mut self, r#move: Move) {
@@ -393,7 +388,7 @@ impl Board {
                 // Should raise value error if flipped, not wasting cycles on error checking,
                 // shouldn't be mixed up in the first place!
                 self.remove_stack_cards((stack_card, None));
-                *self.card_counts.get_mut(&(stack_card.into())).unwrap() -= 1;
+                self.card_counts[(stack_card.0 % 13) as usize] -= 1;
                 self.remove_cards((board_card, None));
             }
             (MatchType::Stack, (left, right)) => {
@@ -406,9 +401,9 @@ impl Board {
                 }
 
                 self.remove_stack_cards((left, right));
-                *self.card_counts.get_mut(&(left.into())).unwrap() -= 1;
+                self.card_counts[(left.0 % 13) as usize] -= 1;
                 if let Some(right) = right {
-                    *self.card_counts.get_mut(&(right.into())).unwrap() -= 1;
+                    self.card_counts[(right.0 % 13) as usize] -= 1;
                 }
             }
             _ => panic!("Illegal move"),
@@ -479,7 +474,7 @@ mod test {
             RawCard(47),
             RawCard(43),
         ];
-        let leaf_idxs: Vec<u8> = vec![21, 22, 23, 24, 25, 26, 27];
+        let leaf_idxs: Vec<usize> = vec![21, 22, 23, 24, 25, 26, 27];
 
         Board::new(cards, stack, leaf_idxs)
     }

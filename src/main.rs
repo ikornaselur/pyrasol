@@ -48,7 +48,7 @@ fn main() {
 
     let (board_cards, stack_cards) = parse_board(args.board, args.stack);
     validate_board(&board_cards, &stack_cards);
-    let leaf_idxs: Vec<u8> = vec![21, 22, 23, 24, 25, 26, 27];
+    let leaf_idxs: Vec<usize> = vec![21, 22, 23, 24, 25, 26, 27];
     let board = Board::new(board_cards, stack_cards, leaf_idxs);
 
     pretty_print_board(&board);

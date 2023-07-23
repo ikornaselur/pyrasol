@@ -1,7 +1,7 @@
 /// Which card indexes the card directly blocks
 /// Returns a tuple of the lowest index blocked and how many cards are blocked, that is the value
 /// (3, 1) means that index 3 is blocked while (3, 2) means index 3 and 4 are blocked
-pub fn card_directly_blocks(card: u8) -> (u8, u8) {
+pub fn card_directly_blocks(card: usize) -> (usize, usize) {
     match card {
         0 => (0, 0),
         1 | 2 => (0, 1),
@@ -34,7 +34,7 @@ pub fn card_directly_blocks(card: u8) -> (u8, u8) {
     }
 }
 
-pub fn card_blocks(card: u8) -> Vec<u8> {
+pub fn card_blocks(card: usize) -> Vec<usize> {
     match card {
         0 => vec![],
         1 | 2 => vec![0],
@@ -67,7 +67,7 @@ pub fn card_blocks(card: u8) -> Vec<u8> {
     }
 }
 
-pub fn card_blocked_by(card: u8) -> Vec<u8> {
+pub fn card_blocked_by(card: usize) -> Vec<usize> {
     match card {
         0 => (1..28).collect(),
         1 => vec![
