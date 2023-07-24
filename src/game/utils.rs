@@ -5,6 +5,26 @@ use anyhow::{bail, Result};
 use colored::{ColoredString, Colorize};
 use std::collections::HashMap;
 
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
+pub enum Verbosity {
+    Off,
+    Low,
+    Medium,
+    High,
+    VeryHigh,
+}
+
+pub fn parse_verbosity(verbosity: u8) -> Verbosity {
+    match verbosity {
+        0 => Verbosity::Off,
+        1 => Verbosity::Low,
+        2 => Verbosity::Medium,
+        3 => Verbosity::High,
+        _ => Verbosity::VeryHigh,
+    }
+}
+    
+
 /// A raw value will be from 0 to 51
 /// Aces will be 0, 13, 26 and 39 for example
 /// This will turn a raw value into a card value
@@ -247,5 +267,13 @@ mod test {
             stack,
             vec![RawCard(13), RawCard(26), RawCard(25), RawCard(11)]
         );
+    }
+
+    #[test]
+    fn test_verbosity_order() {
+        assert!(Verbosity::Off < Verbosity::Low);
+        assert!(Verbosity::Low < Verbosity::Medium);
+        assert!(Verbosity::Medium < Verbosity::High);
+        assert!(Verbosity::High < Verbosity::VeryHigh);
     }
 }

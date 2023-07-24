@@ -2,7 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 use pyrasol::validators::validate_board;
 use pyrasol::Board;
-use pyrasol::{parse_board, pretty_print_board, pretty_print_move};
+use pyrasol::{parse_board, parse_verbosity, pretty_print_board, pretty_print_move, Verbosity};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -40,8 +40,10 @@ struct Args {
     clear_all: bool,
 
     /// Verbose output
-    #[arg(long, short, default_value_t = false)]
-    verbose: bool,
+    ///
+    /// Repeat up to four times for different levels of verbosity
+    #[arg(long, short, action = clap::ArgAction::Count)]
+    verbose: u8,
 
     /// Max depth to simulate
     #[arg(long, short, default_value_t = 60)]
@@ -58,6 +60,7 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let verbosity = parse_verbosity(args.verbose);
 
     let (board_cards, stack_cards) = parse_board(args.board, args.stack)?;
     validate_board(&board_cards, &stack_cards)?;
@@ -78,18 +81,18 @@ fn main() -> Result<()> {
         top_moves,
         first_top_moves,
         first_games,
-        args.verbose,
+        verbosity,
     )?;
 
-    describe_solution(board, solution, false);
+    describe_solution(board, solution, verbosity);
 
     Ok(())
 }
 
-fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
+fn describe_solution(mut board: Board, solution: Vec<usize>, verbosity: Verbosity) {
     let mut moves_made: i32 = 0;
     for move_num in solution.iter() {
-        if verbose {
+        if verbosity >= Verbosity::High {
             pretty_print_board(&board);
         }
 
@@ -98,7 +101,7 @@ fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
             panic!("No moves left?");
         }
 
-        if verbose {
+        if verbosity >= Verbosity::VeryHigh {
             println!("Available moves:");
             for (idx, r#move) in moves.iter().enumerate() {
                 if idx + 1 == *move_num {
@@ -113,7 +116,7 @@ fn describe_solution(mut board: Board, solution: Vec<usize>, verbose: bool) {
             None => panic!("Move {} not found in moves: {:?}", move_num, moves),
         };
 
-        if !verbose {
+        if verbosity < Verbosity::VeryHigh {
             pretty_print_move(&board, moves_made as u8, *r#move, true);
         }
 
@@ -130,7 +133,7 @@ fn simulate_games(
     top_moves: usize,
     first_top_moves: usize,
     first_games: usize,
-    verbose: bool,
+    verbosity: Verbosity,
 ) -> Result<Vec<usize>> {
     let seen_states = Arc::new(Mutex::new(HashSet::new()));
 
@@ -146,12 +149,28 @@ fn simulate_games(
         .push((board, vec![]));
 
     let mut queue_num = 0;
+
+    let duplicates = Arc::new(Mutex::new(0));
+    let total_moves_played = Arc::new(Mutex::new(0));
+
     while queue_num < max_depth {
         let mut queue = queues.lock().unwrap().get(queue_num).unwrap().clone();
         let queue_size = queue.len();
 
-        if verbose {
-            println!("Queue {} size: {}", queue_num, queue_size);
+        if verbosity == Verbosity::Low {
+            println!(
+                "Queue {} - size: {}",
+                queue_num,
+                queue_size,
+            );
+        } else if verbosity >= Verbosity::Medium {
+            println!(
+                "Queue {} - size: {} - total moves played: {} - duplicates: {}",
+                queue_num,
+                queue_size,
+                *total_moves_played.lock().unwrap(),
+                *duplicates.lock().unwrap()
+            );
         }
 
         let result = queue.par_drain(..).find_map_any(|(board, moves_made)| {
@@ -188,11 +207,17 @@ fn simulate_games(
 
                 let mut new_board: Board = board.clone();
                 new_board.play_move(*r#move);
+                if verbosity >= Verbosity::Medium {
+                    *total_moves_played.lock().unwrap() += 1;
+                }
 
                 let board_state = new_board.get_state();
                 let mut seen_states = seen_states.lock().unwrap();
 
                 if seen_states.contains(&board_state) {
+                    if verbosity >= Verbosity::Medium {
+                        *duplicates.lock().unwrap() += 1;
+                    }
                     continue;
                 }
                 seen_states.insert(board_state);
