@@ -59,8 +59,8 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let (board_cards, stack_cards) = parse_board(args.board, args.stack);
-    validate_board(&board_cards, &stack_cards);
+    let (board_cards, stack_cards) = parse_board(args.board, args.stack)?;
+    validate_board(&board_cards, &stack_cards)?;
     let leaf_idxs: Vec<usize> = vec![21, 22, 23, 24, 25, 26, 27];
     let board = Board::new(board_cards, stack_cards, leaf_idxs, args.clear_all);
 

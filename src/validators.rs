@@ -1,6 +1,8 @@
 use crate::game::card::{Card, RawCard};
+use crate::game::utils::pretty_print_card;
+use anyhow::{bail, Result};
 
-pub fn validate_board(board_cards: &[RawCard], stack_cards: &[RawCard]) {
+pub fn validate_board(board_cards: &[RawCard], stack_cards: &[RawCard]) -> Result<()> {
     let mut card_counts: Vec<u8> = vec![0; 13];
 
     for card in board_cards.iter() {
@@ -12,9 +14,24 @@ pub fn validate_board(board_cards: &[RawCard], stack_cards: &[RawCard]) {
         card_counts[card_value as usize] += 1;
     }
 
-    for count in card_counts.iter() {
-        if *count != 4 {
-            panic!("Invalid board: card {} appears {} times", count, *count);
-        }
+    if let Some(idx) =
+        card_counts.iter().enumerate().find_map(
+            |(idx, count)| {
+                if *count != 4 {
+                    Some(idx)
+                } else {
+                    None
+                }
+            },
+        )
+    {
+        let card = RawCard(idx.try_into().unwrap());
+        bail!(
+            "Card {} is present {} times, but every card needs to be present 4 times across the board and stack",
+            pretty_print_card(card, true),
+            card_counts[idx]
+        )
     }
+
+    Ok(())
 }

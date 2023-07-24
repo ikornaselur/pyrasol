@@ -1,6 +1,7 @@
 use crate::game::board::Board;
 use crate::game::card::{Card, RawCard};
 use crate::game::r#move::Move;
+use anyhow::{bail, Result};
 use colored::{ColoredString, Colorize};
 use std::collections::HashMap;
 
@@ -32,7 +33,7 @@ pub fn match_card(card: Card) -> Card {
 ///     RawCard(13)
 ///     RawCard(24)  // Second card offset by 13
 ///
-pub fn parse_board(cards_str: String, stack_str: String) -> (Vec<RawCard>, Vec<RawCard>) {
+pub fn parse_board(cards_str: String, stack_str: String) -> Result<(Vec<RawCard>, Vec<RawCard>)> {
     let mut cards: Vec<RawCard> = vec![];
     let mut stack: Vec<RawCard> = vec![];
 
@@ -47,7 +48,7 @@ pub fn parse_board(cards_str: String, stack_str: String) -> (Vec<RawCard>, Vec<R
             'k' | 'K' => 13,
             '0' => 10,
             '1'..='9' => char.to_digit(10).unwrap() as u8,
-            _ => panic!("Unknown val: {}", char),
+            _ => bail!("Unknown value ({}) - Use a for Ace, j for Jack, q for Queen, k for King and 0 for 10", char),
         } - 1;
         let count = counts.entry(val).or_insert(0);
         cards.push(RawCard(val + *count * 13));
@@ -63,14 +64,14 @@ pub fn parse_board(cards_str: String, stack_str: String) -> (Vec<RawCard>, Vec<R
             'k' | 'K' => 13,
             '0' => 10,
             '1'..='9' => char.to_digit(10).unwrap() as u8,
-            _ => panic!("Unknown val: {}", char),
+            _ => bail!("Unknown value ({}) - Use a for Ace, j for Jack, q for Queen, k for King and 0 for 10", char),
         } - 1;
         let count = counts.entry(val).or_insert(0);
         stack.push(RawCard(val + *count * 13));
         *count += 1;
     }
 
-    (cards, stack)
+    Ok((cards, stack))
 }
 
 pub fn pretty_print_board(board: &Board) {
@@ -85,7 +86,10 @@ pub fn pretty_print_board(board: &Board) {
         print!("{}", line);
         for _ in 0..(row + 1) {
             if board.leaf_idxs.contains(&idx) {
-                print!("{} ", pretty_print_card(board.board_cards[idx], false).purple());
+                print!(
+                    "{} ",
+                    pretty_print_card(board.board_cards[idx], false).purple()
+                );
             } else {
                 print!("{} ", pretty_print_card(board.board_cards[idx], false));
             };
@@ -121,7 +125,7 @@ pub fn cards_match(a: RawCard, b: RawCard) -> bool {
     match_card(a) == b
 }
 
-fn pretty_print_card(card: RawCard, full_width: bool) -> ColoredString {
+pub fn pretty_print_card(card: RawCard, full_width: bool) -> ColoredString {
     match Card::from(card) {
         Card(1) => String::from("A"),
         Card(10) => {
@@ -233,7 +237,7 @@ mod test {
         let cards_str = "12jk".to_string();
         let stack_str = "aakq".to_string();
 
-        let (cards, stack) = parse_board(cards_str, stack_str);
+        let (cards, stack) = parse_board(cards_str, stack_str).unwrap();
 
         assert_eq!(
             cards,
