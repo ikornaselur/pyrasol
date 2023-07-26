@@ -55,25 +55,17 @@ impl Board {
         }
     }
 
-    pub fn get_state(&self) -> String {
-        let card_state = self
+    pub fn get_state(&self) -> Vec<u8> {
+        let card_state: Vec<u8> = self
             .leaf_idxs
             .iter()
-            .map(|&idx| idx.to_string())
-            .collect::<Vec<String>>()
-            .join(":");
+            .map(|&idx| idx as u8)
+            .chain(vec![0u8])
+            .chain(self.stack.iter().map(|card| card.0))
+            .chain(vec![0u8, self.moves as u8, 0u8, self.stack_idx as u8])
+            .collect();
 
-        let stack_state = self
-            .stack
-            .iter()
-            .map(|card| card.0.to_string())
-            .collect::<Vec<String>>()
-            .join(":");
-
-        format!(
-            "{}|{}|{}|{}",
-            self.moves, card_state, stack_state, self.stack_idx
-        )
+        card_state
     }
 
     pub fn remove_cards(&mut self, (left, right): (RawCard, Option<RawCard>)) {
@@ -371,7 +363,6 @@ impl Board {
             self.stack.remove(stack_card_idx);
             self.stack_counts[(right.0 % 13) as usize] -= 1;
         }
-
 
         if self.clear_all && self.stack.is_empty() && self.leaf_idxs.is_empty() {
             self.completed = true;
